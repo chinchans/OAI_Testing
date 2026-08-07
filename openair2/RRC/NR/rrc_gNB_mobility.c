@@ -203,13 +203,6 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
-  if (source_du != NULL) {
-    f1ap_fill_ltm_ue_context_setup_req(&ue_context_setup_req,
-                                       &cell_info->plmn,
-                                       cell_info->nr_cellid,
-                                       source_du->setup_req->gNB_DU_id,
-                                       target_du->setup_req->gNB_DU_id);
-  }
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }

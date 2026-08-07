@@ -33,16 +33,6 @@ f1ap_ue_context_setup_req_t cp_ue_context_setup_req(const f1ap_ue_context_setup_
 bool eq_ue_context_setup_req(const f1ap_ue_context_setup_req_t *a, const f1ap_ue_context_setup_req_t *b);
 void free_ue_context_setup_req(f1ap_ue_context_setup_req_t *req);
 
-/** Populate scoped LTM IEs on UE CONTEXT SETUP REQUEST (Inter-gNB-DU LTM handover). */
-void f1ap_fill_ltm_ue_context_setup_req(f1ap_ue_context_setup_req_t *req,
-                                        const plmn_id_t *plmn,
-                                        uint64_t nr_cellid,
-                                        uint64_t source_gnb_du_id,
-                                        uint64_t target_gnb_du_id);
-
-/** Build default SSBInformation APER bytes for LTM tests and struct population. */
-byte_array_t f1ap_build_default_ssb_information_ba(void);
-
 struct F1AP_F1AP_PDU *encode_ue_context_setup_resp(const f1ap_ue_context_setup_resp_t *msg);
 bool decode_ue_context_setup_resp(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context_setup_resp_t *out);
 f1ap_ue_context_setup_resp_t cp_ue_context_setup_resp(const f1ap_ue_context_setup_resp_t *orig);

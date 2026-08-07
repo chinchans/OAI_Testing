@@ -43,7 +43,6 @@
 #include "lib/f1ap_rrc_message_transfer.h"
 #include "lib/f1ap_interface_management.h"
 #include "lib/f1ap_ue_context.h"
-#include "F1AP_CompleteCandidateConfigurationIndicator.h"
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
@@ -825,8 +824,6 @@ static void test_f1ap_ue_context_setup_request()
 
   _F1_MALLOC(orig.gnb_du_ue_agg_mbr_ul, 5LL * 1000 * 1000 * 1000);
 
-  f1ap_fill_ltm_ue_context_setup_req(&orig, &plmn, orig.nr_cellid, 1001, 2002);
-
   F1AP_F1AP_PDU_t *f1enc = encode_ue_context_setup_req(&orig);
   F1AP_F1AP_PDU_t *f1dec = f1ap_encode_decode(f1enc);
   f1ap_msg_free(f1enc);
@@ -929,20 +926,6 @@ static void test_f1ap_ue_context_setup_response()
     orig.srbs[i].id = 1 + i;
     orig.srbs[i].lcid = 1+i+10;
   }
-
-  orig.LTMConfiguration = calloc_or_fail(1, sizeof(*orig.LTMConfiguration));
-  orig.LTMConfiguration->sSBInformation = f1ap_build_default_ssb_information_ba();
-  orig.LTMConfiguration->referenceConfigurationInformation = get_malloced_test_ba("LTM-REF-CONFIG-INFO");
-  orig.LTMConfiguration->completeCandidateConfigurationIndicator = calloc_or_fail(1, sizeof(int));
-  *orig.LTMConfiguration->completeCandidateConfigurationIndicator = F1AP_CompleteCandidateConfigurationIndicator_complete;
-  orig.LTMConfiguration->lTMCFRAResourceConfig = get_malloced_test_ba("LTM-CFRA-CONFIG");
-  orig.LTMConfiguration->lTMCFRAResourceConfigSUL = get_malloced_test_ba("LTM-CFRA-SUL");
-
-  orig.EarlySyncInformation = calloc_or_fail(1, sizeof(*orig.EarlySyncInformation));
-  orig.EarlySyncInformation->tCIStatesConfigurationsList_count = 1;
-  orig.EarlySyncInformation->tCIStatesConfigurationsList_array = calloc_or_fail(1, sizeof(*orig.EarlySyncInformation->tCIStatesConfigurationsList_array));
-  orig.EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIStateID = 3;
-  orig.EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIState = get_test_ba("TCI-STATE");
 
   F1AP_F1AP_PDU_t *f1enc = encode_ue_context_setup_resp(&orig);
   F1AP_F1AP_PDU_t *f1dec = f1ap_encode_decode(f1enc);

@@ -527,11 +527,11 @@
    uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
  } f1ap_LTMgNB_DU_IDs_Item_t;
  
-typedef struct f1ap_EarlySyncInformation_Request_s {
-  int RequestforRACHConfiguration; /* RequestforRACHConfiguration ::= ENUMERATED { true, ... } */
-  int LTMgNB_DU_IDsList_count;
-  f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
-} f1ap_EarlySyncInformation_Request_t;
+ typedef struct f1ap_EarlySyncInformation_Request_s {
+   byte_array_t *RequestforRACHConfiguration; /* OCTET STRING */
+   int LTMgNB_DU_IDsList_count;
+   f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
+ } f1ap_EarlySyncInformation_Request_t;
  
  typedef struct f1ap_ue_context_setup_req_s {
    uint32_t gNB_CU_ue_id;
