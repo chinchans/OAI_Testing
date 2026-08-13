@@ -2130,6 +2130,7 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     // case of handover
     // handling of "target CU" information
     DevAssert(UE->ho_context->target != NULL);
+    nr_ho_target_cu_store_ltm_setup_response(UE->ho_context->target, resp);
     DevAssert(resp->crnti != NULL);
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;

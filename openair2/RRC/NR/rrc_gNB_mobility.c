@@ -20,6 +20,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "assertions.h"
 
@@ -55,8 +56,104 @@ static nr_handover_context_t *alloc_ho_ctx(ho_ctx_type_t type)
   return ho_ctx;
 }
 
+static void free_ho_target_cu_ltm(nr_ho_target_cu_ltm_t *ltm)
+{
+  if (!ltm || !ltm->present)
+    return;
+  free_byte_array(ltm->sSBInformation);
+  if (ltm->referenceConfigurationInformation) {
+    free_byte_array(*ltm->referenceConfigurationInformation);
+    free(ltm->referenceConfigurationInformation);
+  }
+  free(ltm->completeCandidateConfigurationIndicator);
+  if (ltm->lTMCFRAResourceConfig) {
+    free_byte_array(*ltm->lTMCFRAResourceConfig);
+    free(ltm->lTMCFRAResourceConfig);
+  }
+  if (ltm->lTMCFRAResourceConfigSUL) {
+    free_byte_array(*ltm->lTMCFRAResourceConfigSUL);
+    free(ltm->lTMCFRAResourceConfigSUL);
+  }
+  if (ltm->tCIStatesConfigurationsList) {
+    free_byte_array(*ltm->tCIStatesConfigurationsList);
+    free(ltm->tCIStatesConfigurationsList);
+  }
+  memset(ltm, 0, sizeof(*ltm));
+}
+
+void nr_ho_target_cu_free_ltm(nr_ho_target_cu_ltm_t *ltm)
+{
+  free_ho_target_cu_ltm(ltm);
+}
+
+void nr_ho_target_cu_store_ltm_setup_response(nr_ho_target_cu_t *target, const f1ap_ue_context_setup_resp_t *resp)
+{
+  if (!target || !resp)
+    return;
+
+  free_ho_target_cu_ltm(&target->ltm);
+
+  if (resp->LTMConfiguration) {
+    const f1ap_LTMConfiguration_t *ltm = resp->LTMConfiguration;
+    DevAssert(ltm->sSBInformation.len > 0);
+    target->ltm.present = true;
+    target->ltm.sSBInformation = copy_byte_array(ltm->sSBInformation);
+    if (ltm->referenceConfigurationInformation) {
+      target->ltm.referenceConfigurationInformation = malloc_or_fail(sizeof(*target->ltm.referenceConfigurationInformation));
+      *target->ltm.referenceConfigurationInformation = copy_byte_array(*ltm->referenceConfigurationInformation);
+    }
+    if (ltm->completeCandidateConfigurationIndicator) {
+      target->ltm.completeCandidateConfigurationIndicator =
+          calloc_or_fail(1, sizeof(*target->ltm.completeCandidateConfigurationIndicator));
+      *target->ltm.completeCandidateConfigurationIndicator = *ltm->completeCandidateConfigurationIndicator;
+    }
+    if (ltm->lTMCFRAResourceConfig) {
+      target->ltm.lTMCFRAResourceConfig = malloc_or_fail(sizeof(*target->ltm.lTMCFRAResourceConfig));
+      *target->ltm.lTMCFRAResourceConfig = copy_byte_array(*ltm->lTMCFRAResourceConfig);
+    }
+    if (ltm->lTMCFRAResourceConfigSUL) {
+      target->ltm.lTMCFRAResourceConfigSUL = malloc_or_fail(sizeof(*target->ltm.lTMCFRAResourceConfigSUL));
+      *target->ltm.lTMCFRAResourceConfigSUL = copy_byte_array(*ltm->lTMCFRAResourceConfigSUL);
+    }
+  }
+
+  if (resp->EarlySyncInformation && resp->EarlySyncInformation->tCIStatesConfigurationsList.len > 0) {
+    if (!target->ltm.present)
+      target->ltm.present = true;
+    target->ltm.tCIStatesConfigurationsList = malloc_or_fail(sizeof(*target->ltm.tCIStatesConfigurationsList));
+    *target->ltm.tCIStatesConfigurationsList = copy_byte_array(resp->EarlySyncInformation->tCIStatesConfigurationsList);
+  }
+}
+
+static void fill_ue_context_setup_req_ltm_inter_du(f1ap_ue_context_setup_req_t *req, const nr_rrc_du_container_t *target_du)
+{
+  const f1ap_served_cell_info_t *target_cell = &target_du->setup_req->cell[0].info;
+
+  f1ap_LTMInformation_Setup_t *ltm_setup = calloc_or_fail(1, sizeof(*ltm_setup));
+  ltm_setup->LTMIndicator = 0; /* F1AP_LTMIndicator_true */
+  ltm_setup->requestforLowerLayerConfiguration = true;
+  req->LTMInformation_Setup = ltm_setup;
+
+  f1ap_LTMConfigurationIDMappingList_t *mapping = calloc_or_fail(1, sizeof(*mapping));
+  mapping->list_count = 1;
+  mapping->list_array = calloc_or_fail(1, sizeof(*mapping->list_array));
+  mapping->list_array[0].lTMCellID_plmn = target_cell->plmn;
+  mapping->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
+  mapping->list_array[0].lTMConfigurationID = 1;
+  req->LTMConfigurationIDMappingList = mapping;
+
+  f1ap_EarlySyncInformation_Request_t *early_sync = calloc_or_fail(1, sizeof(*early_sync));
+  early_sync->requestforRACHConfiguration = 0; /* F1AP_RequestforRACHConfiguration_true */
+  early_sync->LTMgNB_DU_IDsList_count = 1;
+  early_sync->LTMgNB_DU_IDsList_array = calloc_or_fail(1, sizeof(*early_sync->LTMgNB_DU_IDsList_array));
+  early_sync->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = (uint64_t)target_du->setup_req->gNB_DU_id;
+  req->EarlySyncInformation_Request = early_sync;
+}
+
 static void free_ho_ctx(nr_handover_context_t *ho_ctx)
 {
+  if (ho_ctx->target)
+    free_ho_target_cu_ltm(&ho_ctx->target->ltm);
   free(ho_ctx->source);
   free(ho_ctx->target);
   free(ho_ctx);
@@ -203,6 +300,7 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
+  fill_ue_context_setup_req_ltm_inter_du(&ue_context_setup_req, target_du);
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }

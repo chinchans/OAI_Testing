@@ -42,6 +42,20 @@
 #include "openair2/RRC/NR/nr_rrc_defs.h"
 #include <openair3/ocp-gtpu/gtp_itf.h>
 
+/* Complete mandatory LTM sub-IE values on UE CONTEXT SETUP REQUEST before F1AP encode.
+ * Upstream RRC sets optional LTM IE pointers; this function finalizes mandatory sub-fields. */
+static void f1ap_cu_populate_ue_context_setup_req_ltm(f1ap_ue_context_setup_req_t *req)
+{
+  if (!req)
+    return;
+
+  if (req->LTMInformation_Setup && req->LTMInformation_Setup->LTMIndicator < 0)
+    req->LTMInformation_Setup->LTMIndicator = 0; /* F1AP_LTMIndicator_true */
+
+  if (req->EarlySyncInformation_Request && req->EarlySyncInformation_Request->requestforRACHConfiguration < 0)
+    req->EarlySyncInformation_Request->requestforRACHConfiguration = 0; /* F1AP_RequestforRACHConfiguration_true */
+}
+
 //Fixme: Uniq dirty DU instance, by global var, datamodel need better management
 instance_t CUuniqInstance=0;
 
@@ -187,6 +201,7 @@ void *F1AP_CU_task(void *arg) {
         break;
 
       case F1AP_UE_CONTEXT_SETUP_REQ: // from rrc
+        f1ap_cu_populate_ue_context_setup_req_ltm(&F1AP_UE_CONTEXT_SETUP_REQ(received_msg));
         CU_send_UE_CONTEXT_SETUP_REQUEST(assoc_id, &F1AP_UE_CONTEXT_SETUP_REQ(received_msg));
         free_ue_context_setup_req(&F1AP_UE_CONTEXT_SETUP_REQ(received_msg));
         break;

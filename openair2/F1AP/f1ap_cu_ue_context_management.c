@@ -76,6 +76,9 @@ int CU_handle_UE_CONTEXT_SETUP_RESPONSE(instance_t instance, sctp_assoc_t assoc_
     return -1;
   }
 
+  if (resp.LTMConfiguration)
+    DevAssert(resp.LTMConfiguration->sSBInformation.len > 0);
+
   MessageDef *msg_p = itti_alloc_new_message(TASK_DU_F1, 0, F1AP_UE_CONTEXT_SETUP_RESP);
   msg_p->ittiMsgHeader.originInstance = assoc_id;
   F1AP_UE_CONTEXT_SETUP_RESP(msg_p) = resp;
