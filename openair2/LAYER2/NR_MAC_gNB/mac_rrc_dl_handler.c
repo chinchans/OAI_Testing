@@ -252,16 +252,8 @@ static int handle_ue_context_srbs_setup(NR_UE_info_t *UE,
     nr_lc_config_t c = {.lcid = rlc_BearerConfig->logicalChannelIdentity, .priority = priority};
     nr_mac_add_lcid(&UE->UE_sched_ctrl, &c);
 
-    /* Hardcoded-safe F1AP SRBs-Setup-Item: never send sRBID/lCID = 0 (PER malformed). */
-    int srb_id = srb->id;
-    if (srb_id < 1 || srb_id > 3)
-      srb_id = (i == 0) ? 1 : 2;
-    int resp_lcid = (int)rlc_BearerConfig->logicalChannelIdentity;
-    if (resp_lcid < 1 || resp_lcid > 32)
-      resp_lcid = srb_id;
-
-    (*resp_srbs)[i].id = srb_id;
-    (*resp_srbs)[i].lcid = resp_lcid;
+    (*resp_srbs)[i].id = srb->id;
+    (*resp_srbs)[i].lcid = c.lcid;
 
     if (rlc_BearerConfig->logicalChannelIdentity == 1) {
       // CU asks to add SRB1: when creating a cellGroupConfig, we always add it

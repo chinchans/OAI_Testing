@@ -300,22 +300,13 @@
  {
    F1AP_SRBs_Setup_List_t list = {0};
    for (int i = 0; i < n; ++i) {
-     int srb_id = srbs[i].id;
-     if (srb_id < 1 || srb_id > 3)
-       srb_id = (i == 0) ? 1 : 2;
-     int lcid = srbs[i].lcid;
-     if (lcid < 1 || lcid > 32)
-       lcid = srb_id;
-
      asn1cSequenceAdd(list, F1AP_SRBs_Setup_ItemIEs_t, itie);
      itie->id = F1AP_ProtocolIE_ID_id_SRBs_Setup_Item;
      itie->criticality = F1AP_Criticality_ignore;
      itie->value.present = F1AP_SRBs_Setup_ItemIEs__value_PR_SRBs_Setup_Item;
      F1AP_SRBs_Setup_Item_t *it = &itie->value.choice.SRBs_Setup_Item;
-     memset(it, 0, sizeof(*it));
-     it->sRBID = srb_id;
-     it->lCID = lcid;
-     it->iE_Extensions = NULL;
+     it->sRBID = srbs[i].id;
+     it->lCID = srbs[i].lcid;
    }
    return list;
  }
@@ -324,22 +315,13 @@
  {
    F1AP_SRBs_SetupMod_List_t list = {0};
    for (int i = 0; i < n; ++i) {
-     int srb_id = srbs[i].id;
-     if (srb_id < 1 || srb_id > 3)
-       srb_id = (i == 0) ? 1 : 2;
-     int lcid = srbs[i].lcid;
-     if (lcid < 1 || lcid > 32)
-       lcid = srb_id;
-
      asn1cSequenceAdd(list, F1AP_SRBs_SetupMod_ItemIEs_t, itie);
      itie->id = F1AP_ProtocolIE_ID_id_SRBs_SetupMod_Item;
      itie->criticality = F1AP_Criticality_ignore;
      itie->value.present = F1AP_SRBs_SetupMod_ItemIEs__value_PR_SRBs_SetupMod_Item;
      F1AP_SRBs_SetupMod_Item_t *it = &itie->value.choice.SRBs_SetupMod_Item;
-     memset(it, 0, sizeof(*it));
-     it->sRBID = srb_id;
-     it->lCID = lcid;
-     it->iE_Extensions = NULL;
+     it->sRBID = srbs[i].id;
+     it->lCID = srbs[i].lcid;
    }
    return list;
  }
