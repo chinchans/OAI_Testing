@@ -36,6 +36,8 @@
 #include <openair2/UTIL/OPT/opt.h>
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 
+void nr_acknack(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, frame_t frame, bool crc_pass);
+
 //#define SRS_IND_DEBUG
 
 int get_ul_tda(gNB_MAC_INST *nrmac, int frame, int slot)
@@ -941,6 +943,8 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
         nr_mac_trigger_ul_failure(&UE->UE_sched_ctrl, UE->current_UL_BWP.scs);
       }
     }
+    if (UE_scheduling_control->ul_harq_processes[harq_pid].round == 0)
+      nr_acknack(gNB_mac, UE, frameP, sduP != NULL);
     handle_nr_ul_harq(gNB_mac, UE, frameP, slotP, current_rnti, harq_pid, sduP == NULL);
   } else { 
     nr_rx_ra_sdu(gnb_mod_idP, CC_idP, frameP, slotP, current_rnti, sduP, sdu_lenP, timing_advance, ul_cqi, rssi);
