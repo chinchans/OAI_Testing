@@ -43,6 +43,7 @@
 static frame_t ul_bler_log_frame[MAX_MOBILES_PER_GNB + 1];
 static uint64_t ul_crc_pass_cnt[MAX_MOBILES_PER_GNB + 1];
 static uint64_t ul_crc_fail_cnt[MAX_MOBILES_PER_GNB + 1];
+static uint64_t dl_harq_retrans_cnt[MAX_MOBILES_PER_GNB + 1];
 
 void nr_acknack(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, frame_t frame, bool crc_pass)
 {
@@ -456,6 +457,18 @@ static void handle_dl_harq(NR_UE_info_t * UE,
     LOG_D(PHY,"NACK for: pid %d, ue %04x\n",harq_pid, UE->rnti);
     add_tail_nr_list(&sched_ctrl->retrans_dl_harq, harq_pid);
     harq->round++;
+    if (UE->uid <= MAX_MOBILES_PER_GNB)
+      dl_harq_retrans_cnt[UE->uid]++;
+    struct {
+      uint64_t nr_cellid;
+      int rrc_ue_id;
+      rnti_t rnti;
+    } ue_log_ctx = {.nr_cellid = 0, .rrc_ue_id = UE->uid, .rnti = UE->rnti};
+    LOG_A(NR_MAC,
+          UE_LOG_FMT " DL HARQ retransmission round %u running total %"PRIu64"\n",
+          UE_LOG_ARGS(&ue_log_ctx),
+          harq->round,
+          UE->uid <= MAX_MOBILES_PER_GNB ? dl_harq_retrans_cnt[UE->uid] : (uint64_t)0);
   }
 }
 
