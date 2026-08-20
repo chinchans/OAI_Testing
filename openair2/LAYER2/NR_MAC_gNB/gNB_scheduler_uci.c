@@ -32,52 +32,6 @@
 #include "common/ran_context.h"
 #include "common/utils/nr/nr_common.h"
 #include "nfapi/oai_integration/vendor_ext.h"
-
-#ifndef UE_LOG_FMT
-#define UE_LOG_FMT "(cellID %lx, UE ID %d RNTI %04x)"
-#define UE_LOG_ARGS(ue_context) (ue_context)->nr_cellid, (ue_context)->rrc_ue_id, (ue_context)->rnti
-#endif
-
-#define UL_BLER_LOG_FRAME_INTERVAL 50 /* 500 ms at 10 ms per frame */
-
-static frame_t ul_bler_log_frame[MAX_MOBILES_PER_GNB + 1];
-static uint64_t ul_crc_pass_cnt[MAX_MOBILES_PER_GNB + 1];
-static uint64_t ul_crc_fail_cnt[MAX_MOBILES_PER_GNB + 1];
-
-void nr_acknack(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, frame_t frame, bool crc_pass)
-{
-  const int uid = UE->uid;
-  if (uid > MAX_MOBILES_PER_GNB)
-    return;
-
-  if (crc_pass)
-    ul_crc_pass_cnt[uid]++;
-  else
-    ul_crc_fail_cnt[uid]++;
-
-  if (ul_bler_log_frame[uid] == 0)
-    ul_bler_log_frame[uid] = frame;
-
-  int diff = frame - ul_bler_log_frame[uid];
-  if (diff < 0)
-    diff += 1024;
-  if (diff < UL_BLER_LOG_FRAME_INTERVAL)
-    return;
-
-  const uint64_t total = ul_crc_pass_cnt[uid] + ul_crc_fail_cnt[uid];
-  const float bler = total > 0 ? (float)ul_crc_fail_cnt[uid] / (float)total : 0.0f;
-  const uint64_t nr_cellid = nrmac->f1_config.setup_req ? nrmac->f1_config.setup_req->cell[0].info.nr_cellid : 0;
-  struct {
-    uint64_t nr_cellid;
-    int rrc_ue_id;
-    rnti_t rnti;
-  } ue_log_ctx = {.nr_cellid = nr_cellid, .rrc_ue_id = UE->uid, .rnti = UE->rnti};
-  LOG_A(NR_MAC, UE_LOG_FMT " uplink block error rate %.5f\n", UE_LOG_ARGS(&ue_log_ctx), bler);
-  ul_bler_log_frame[uid] = frame;
-  ul_crc_pass_cnt[uid] = 0;
-  ul_crc_fail_cnt[uid] = 0;
-}
-
 static void nr_fill_nfapi_pucch(gNB_MAC_INST *nrmac, frame_t frame, slot_t slot, const NR_sched_pucch_t *pucch, NR_UE_info_t* UE)
 {
 
