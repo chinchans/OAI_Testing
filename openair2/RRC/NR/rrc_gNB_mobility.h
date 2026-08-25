@@ -21,10 +21,8 @@
 #ifndef RRC_GNB_MOBILITY_H_
 #define RRC_GNB_MOBILITY_H_
 
-#include <stdbool.h>
 #include <stdint.h>
 #include "common/utils/ds/byte_array.h"
-#include "f1ap_messages_types.h"
 
 /* forward declarations */
 typedef struct gNB_RRC_INST_s gNB_RRC_INST;
@@ -54,16 +52,6 @@ typedef struct nr_ho_source_cu {
 /* acknowledgement of handover request. buf+len is the RRC Reconfiguration */
 typedef void (*ho_req_ack_t)(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
 typedef void (*ho_success_t)(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
-typedef struct nr_ho_target_cu_ltm_s {
-  bool present;
-  byte_array_t sSBInformation;
-  byte_array_t *referenceConfigurationInformation;
-  int *completeCandidateConfigurationIndicator;
-  byte_array_t *lTMCFRAResourceConfig;
-  byte_array_t *lTMCFRAResourceConfigSUL;
-  byte_array_t *tCIStatesConfigurationsList;
-} nr_ho_target_cu_ltm_t;
-
 typedef struct nr_ho_target_cu {
   /// pointer to the (target) DU structure
   const nr_rrc_du_container_t *du;
@@ -77,8 +65,6 @@ typedef struct nr_ho_target_cu {
   ho_req_ack_t ho_req_ack;
   /// function pointer to announce handover success
   ho_success_t ho_success;
-  /// decoded LTM IEs from UE CONTEXT SETUP RESPONSE (Inter-gNB-DU LTM handover)
-  nr_ho_target_cu_ltm_t ltm;
 } nr_ho_target_cu_t;
 
 typedef struct nr_handover_context_s {
@@ -88,7 +74,5 @@ typedef struct nr_handover_context_s {
 
 void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue);
-void nr_ho_target_cu_store_ltm_setup_response(nr_ho_target_cu_t *target, const f1ap_ue_context_setup_resp_t *resp);
-void nr_ho_target_cu_free_ltm(nr_ho_target_cu_ltm_t *ltm);
 
 #endif /* RRC_GNB_MOBILITY_H_ */

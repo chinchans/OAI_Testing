@@ -503,8 +503,7 @@
  /* Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5, TS 38.473 9.2.2.1): LTMInformation-Setup IE */
  typedef struct f1ap_LTMInformation_Setup_s {
    int LTMIndicator; /* LTMIndicator ::= ENUMERATED { true, ... } */
-   bool requestforLowerLayerConfiguration; /* ReferenceConfiguration CHOICE: rEQUESTforLowerLayerConfiguration */
-   byte_array_t *referenceConfiguration; /* ReferenceConfiguration CHOICE: referenceConfiguration OCTET STRING */
+   byte_array_t *ReferenceConfiguration; /* optional OCTET STRING */
    byte_array_t *cSIResourceConfigToAddModList; /* CSIResourceConfiguration optional */
    byte_array_t *cSIResourceConfigToReleaseList; /* CSIResourceConfiguration optional */
  } f1ap_LTMInformation_Setup_t;
@@ -529,7 +528,7 @@
  } f1ap_LTMgNB_DU_IDs_Item_t;
  
  typedef struct f1ap_EarlySyncInformation_Request_s {
-   int requestforRACHConfiguration; /* RequestforRACHConfiguration ::= ENUMERATED { true, ... } */
+   byte_array_t *RequestforRACHConfiguration; /* OCTET STRING */
    int LTMgNB_DU_IDsList_count;
    f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
  } f1ap_EarlySyncInformation_Request_t;
@@ -567,9 +566,17 @@
    uint64_t nRCellIdentity;
  } f1ap_requestedTargetCellGlobalID_t;
  
- /* EarlySyncInformation: tCIStatesConfigurationsList OCTET STRING, earlyULSyncConfig optional */
+ /* TCIStatesConfigurationsItem: tCIStateID (0..127), tCIState OCTET STRING */
+ #define F1AP_MAX_NO_TCI_STATES 128
+ typedef struct f1ap_TCIStatesConfigurationsItem_s {
+   uint8_t tCIStateID;
+   byte_array_t tCIState;
+ } f1ap_TCIStatesConfigurationsItem_t;
+ 
+ /* EarlySyncInformation: tCIStatesConfigurationsList, earlyULSyncConfig optional, earlyULSyncConfigSUL optional */
  typedef struct f1ap_EarlySyncInformation_s {
-   byte_array_t tCIStatesConfigurationsList; /* TCIStatesConfigurationsList ::= OCTET STRING */
+   int tCIStatesConfigurationsList_count;
+   f1ap_TCIStatesConfigurationsItem_t *tCIStatesConfigurationsList_array;
    byte_array_t *earlyULSyncConfig;    /* EarlyULSyncConfig as OCTET STRING for RRC container */
    byte_array_t *earlyULSyncConfigSUL;
  } f1ap_EarlySyncInformation_t;
