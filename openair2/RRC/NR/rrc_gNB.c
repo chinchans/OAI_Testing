@@ -81,6 +81,7 @@
 #include "openair2/F1AP/lib/f1ap_rrc_message_transfer.h"
 #include "openair2/F1AP/lib/f1ap_interface_management.h"
 #include "openair2/F1AP/lib/f1ap_ue_context.h"
+#include "openair2/F1AP/lib/f1ap_lib_common.h"
 #include "rrc_gNB_NGAP.h"
 #include "rrc_gNB_du.h"
 #include "rrc_gNB_mobility.h"
@@ -2080,6 +2081,45 @@ static void e1_send_bearer_updates(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, f
   rrc->cucp_cuup.bearer_context_mod(assoc_id, &req);
 }
 
+static bool rrc_validate_ltm_ue_context_setup_response(gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp)
+{
+  if (UE->ho_context == NULL || UE->ho_context->target == NULL)
+    return true;
+
+  if (!resp->LTMConfiguration) {
+    LOG_E(NR_RRC, "UE %u: LTM handover UE CONTEXT SETUP RESPONSE missing LTMConfiguration\n", UE->rrc_ue_id);
+    return false;
+  }
+  if (resp->LTMConfiguration->sSBInformation.len == 0) {
+    LOG_E(NR_RRC, "UE %u: LTMConfiguration missing mandatory SSBInformation\n", UE->rrc_ue_id);
+    return false;
+  }
+
+  const nr_rrc_du_container_t *target_du = UE->ho_context->target->du;
+  const f1ap_served_cell_info_t *target_cell = &target_du->setup_req->cell[0].info;
+  if (resp->requestedTargetCellGlobalID) {
+    const f1ap_requestedTargetCellGlobalID_t *tgt = resp->requestedTargetCellGlobalID;
+    if (!eq_f1ap_plmn(&tgt->pLMN_Identity, &target_cell->plmn) || tgt->nRCellIdentity != target_cell->nr_cellid) {
+      LOG_E(NR_RRC,
+            "UE %u: requestedTargetCellGlobalID does not match target DU cell\n",
+            UE->rrc_ue_id);
+      return false;
+    }
+  }
+
+  if (resp->EarlySyncInformation && resp->EarlySyncInformation->tCIStatesConfigurationsList.len == 0) {
+    LOG_E(NR_RRC, "UE %u: EarlySyncInformation missing tCIStatesConfigurationsList\n", UE->rrc_ue_id);
+    return false;
+  }
+
+  LOG_I(NR_RRC,
+        "UE %u: accepted LTM UE CONTEXT SETUP RESPONSE (SSBInformation len %zu, completeCandidate %s)\n",
+        UE->rrc_ue_id,
+        resp->LTMConfiguration->sSBInformation.len,
+        resp->LTMConfiguration->completeCandidateConfigurationIndicator ? "present" : "absent");
+  return true;
+}
+
 static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance_t instance)
 {
   f1ap_ue_context_setup_resp_t *resp = &F1AP_UE_CONTEXT_SETUP_RESP(msg_p);
@@ -2091,6 +2131,13 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
   }
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
   UE->f1_ue_context_active = true;
+
+  if (!rrc_validate_ltm_ue_context_setup_response(UE, resp)) {
+    LOG_E(NR_RRC, "UE %u: invalid LTM UE CONTEXT SETUP RESPONSE, aborting handover\n", UE->rrc_ue_id);
+    if (UE->ho_context && UE->ho_context->source && UE->ho_context->source->ho_cancel)
+      UE->ho_context->source->ho_cancel(rrc, UE);
+    return;
+  }
 
   NR_CellGroupConfig_t *cellGroupConfig = NULL;
   byte_array_t *cgc = &resp->du_to_cu_rrc_info.cell_group_config;

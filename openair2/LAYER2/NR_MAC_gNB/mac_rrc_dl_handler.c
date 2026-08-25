@@ -34,6 +34,11 @@
 #include "lib/f1ap_rrc_message_transfer.h"
 #include "lib/f1ap_interface_management.h"
 #include "lib/f1ap_ue_context.h"
+#include "F1AP_SSBInformation.h"
+#include "F1AP_SSBInformationItem.h"
+#include "F1AP_SSB-TF-Configuration.h"
+#include "common/utils/ds/byte_array.h"
+#include "aper_encoder.h"
 
 #include "executables/softmodem-common.h"
 
@@ -252,8 +257,15 @@ static int handle_ue_context_srbs_setup(NR_UE_info_t *UE,
     nr_lc_config_t c = {.lcid = rlc_BearerConfig->logicalChannelIdentity, .priority = priority};
     nr_mac_add_lcid(&UE->UE_sched_ctrl, &c);
 
-    (*resp_srbs)[i].id = srb->id;
-    (*resp_srbs)[i].lcid = c.lcid;
+    /* F1AP LCID must be 1..32 and SRB-ID 1..3; reject invalid values that break PER. */
+    int srb_id = srb->id;
+    if (srb_id < 1 || srb_id > 3)
+      srb_id = (i == 0) ? 1 : 2;
+    int resp_lcid = (int)rlc_BearerConfig->logicalChannelIdentity;
+    if (resp_lcid < 1 || resp_lcid > 32)
+      resp_lcid = srb_id;
+    (*resp_srbs)[i].id = srb_id;
+    (*resp_srbs)[i].lcid = resp_lcid;
 
     if (rlc_BearerConfig->logicalChannelIdentity == 1) {
       // CU asks to add SRB1: when creating a cellGroupConfig, we always add it
@@ -604,6 +616,63 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   return UE;
 }
 
+static byte_array_t encode_ssb_information_ba(const NR_ServingCellConfigCommon_t *scc, long pci)
+{
+  F1AP_SSBInformation_t ssb_info = {0};
+  asn1cSequenceAdd(ssb_info.sSBInformationList.list, F1AP_SSBInformationItem_t, item);
+
+  long abs_ssb = 641280;
+  if (scc && scc->downlinkConfigCommon && scc->downlinkConfigCommon->frequencyInfoDL
+      && scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB)
+    abs_ssb = *scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
+
+  item->sSB_Configuration.sSB_frequency = abs_ssb;
+  item->sSB_Configuration.sSB_subcarrier_spacing = F1AP_SSB_TF_Configuration__sSB_subcarrier_spacing_kHz30;
+  item->sSB_Configuration.sSB_Transmit_power = 0;
+  item->sSB_Configuration.sSB_periodicity = F1AP_SSB_TF_Configuration__sSB_periodicity_ms20;
+  item->sSB_Configuration.sSB_half_frame_offset = 0;
+  item->sSB_Configuration.sSB_SFN_offset = 0;
+  item->pCI_NR = pci;
+
+  void *buf = NULL;
+  ssize_t encoded = aper_encode_to_new_buffer(&asn_DEF_F1AP_SSBInformation, NULL, &ssb_info, &buf);
+  ASN_STRUCT_RESET(asn_DEF_F1AP_SSBInformation, &ssb_info);
+  AssertFatal(encoded > 0, "Failed to APER-encode SSBInformation for LTMConfiguration\n");
+  byte_array_t ba = create_byte_array((size_t)encoded, (uint8_t *)buf);
+  free(buf);
+  return ba;
+}
+
+static void fill_ue_context_setup_resp_ltm(f1ap_ue_context_setup_resp_t *resp,
+                                           const f1ap_ue_context_setup_req_t *req,
+                                           gNB_MAC_INST *mac)
+{
+  if (!req->LTMInformation_Setup && !req->EarlySyncInformation_Request && !req->LTMConfigurationIDMappingList)
+    return;
+
+  NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
+  long pci = (scc && scc->physCellId) ? *scc->physCellId : 0;
+
+  f1ap_LTMConfiguration_t *ltm = calloc_or_fail(1, sizeof(*ltm));
+  ltm->sSBInformation = encode_ssb_information_ba(scc, pci);
+  ltm->completeCandidateConfigurationIndicator =
+      calloc_or_fail(1, sizeof(*ltm->completeCandidateConfigurationIndicator));
+  *ltm->completeCandidateConfigurationIndicator = 0; /* complete */
+  resp->LTMConfiguration = ltm;
+
+  if (req->EarlySyncInformation_Request) {
+    f1ap_EarlySyncInformation_t *esi = calloc_or_fail(1, sizeof(*esi));
+    static const uint8_t tci_placeholder[] = {0x00};
+    esi->tCIStatesConfigurationsList = create_byte_array(sizeof(tci_placeholder), tci_placeholder);
+    resp->EarlySyncInformation = esi;
+  }
+
+  f1ap_requestedTargetCellGlobalID_t *tgt = calloc_or_fail(1, sizeof(*tgt));
+  tgt->pLMN_Identity = req->plmn;
+  tgt->nRCellIdentity = req->nr_cellid;
+  resp->requestedTargetCellGlobalID = tgt;
+}
+
 void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
 {
   const bool is_SA = IS_SA_MODE(get_softmodem_params());
@@ -695,6 +764,9 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   UE->CellGroup = new_CellGroup;
   int ss_type = cg_configinfo ? NR_SearchSpace__searchSpaceType_PR_ue_Specific: NR_SearchSpace__searchSpaceType_PR_common;
   configure_UE_BWP(mac, scc, UE, false, ss_type, -1, -1);
+
+  /* Fill LTM Response IEs when Request carried LTM (Inter-gNB-DU LTM HO). */
+  fill_ue_context_setup_resp_ltm(&resp, req, mac);
 
   NR_SCHED_UNLOCK(&mac->sched_lock);
 
