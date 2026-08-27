@@ -37,6 +37,7 @@
 #include "openair3/SECU/key_nas_deriver.h"
 #include "openair2/RRC/NR/rrc_gNB_NGAP.h"
 #include "NR_DL-DCCH-MessageType.h"
+#include "NR_CellGroupConfig.h"
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"
@@ -106,6 +107,44 @@ static int fill_drb_to_be_setup(const gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, f1ap_
   return nb_drb;
 }
 
+static byte_array_t rrc_uper_encode_to_ba(const asn_TYPE_descriptor_t *td, const void *sptr)
+{
+  uint8_t buf[8192];
+  asn_enc_rval_t enc = uper_encode_to_buffer(td, NULL, sptr, buf, sizeof(buf));
+  AssertFatal(enc.encoded > 0, "uper_encode_to_buffer failed for %s\n", td->name);
+  return create_byte_array((enc.encoded + 7) >> 3, buf);
+}
+
+static void fill_ltm_ue_context_setup_req(f1ap_ue_context_setup_req_t *req,
+                                          const gNB_RRC_UE_t *ue,
+                                          const nr_rrc_du_container_t *target_du)
+{
+  f1ap_served_cell_info_t *cell_info = &target_du->setup_req->cell[0].info;
+
+  f1ap_LTMInformation_Setup_t *ltm_setup = calloc_or_fail(1, sizeof(*ltm_setup));
+  ltm_setup->LTMIndicator = 1;
+  if (ue->masterCellGroup) {
+    ltm_setup->ReferenceConfiguration = calloc_or_fail(1, sizeof(*ltm_setup->ReferenceConfiguration));
+    *ltm_setup->ReferenceConfiguration = rrc_uper_encode_to_ba(&asn_DEF_NR_CellGroupConfig, ue->masterCellGroup);
+  }
+  req->LTMInformation_Setup = ltm_setup;
+
+  f1ap_LTMConfigurationIDMappingList_t *ltm_map = calloc_or_fail(1, sizeof(*ltm_map));
+  ltm_map->list_count = 1;
+  ltm_map->list_array = calloc_or_fail(1, sizeof(*ltm_map->list_array));
+  ltm_map->list_array[0].lTMCellID_plmn = cell_info->plmn;
+  ltm_map->list_array[0].lTMCellID_nr_cellid = cell_info->nr_cellid;
+  ltm_map->list_array[0].lTMConfigurationID = 1;
+  req->LTMConfigurationIDMappingList = ltm_map;
+
+  f1ap_EarlySyncInformation_Request_t *early_sync_req = calloc_or_fail(1, sizeof(*early_sync_req));
+  early_sync_req->requestforRACHConfiguration = true;
+  early_sync_req->LTMgNB_DU_IDsList_count = 1;
+  early_sync_req->LTMgNB_DU_IDsList_array = calloc_or_fail(1, sizeof(*early_sync_req->LTMgNB_DU_IDsList_array));
+  early_sync_req->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = target_du->setup_req->gNB_DU_id;
+  req->EarlySyncInformation_Request = early_sync_req;
+}
+
 /* \brief Initiate a handover of UE to a specific target cell handled by this
  * CU.
  * \param ue a UE context for which the handover should be triggered. The UE
@@ -121,7 +160,8 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
                                  byte_array_t *ho_prep_info,
                                  ho_req_ack_t ack,
                                  ho_success_t success,
-                                 ho_cancel_t cancel)
+                                 ho_cancel_t cancel,
+                                 bool ltm_handover)
 {
   DevAssert(rrc != NULL);
   DevAssert(ue != NULL);
@@ -145,6 +185,7 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
   // otherwise only for the target DU (N2, Xn)
   ho_ctx_type_t ctx_type = source_du != NULL ? HO_CTX_BOTH : HO_CTX_TARGET;
   nr_handover_context_t *ho_ctx = alloc_ho_ctx(ctx_type);
+  ho_ctx->ltm_handover = ltm_handover;
   ho_ctx->target->du = target_du;
   // we will know target->{du_ue_id,new_rnti} once we have UE ctxt setup
   // response
@@ -203,6 +244,8 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
+  if (ho_ctx->ltm_handover)
+    fill_ltm_ue_context_setup_req(&ue_context_setup_req, ue, target_du);
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }
@@ -350,7 +393,22 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_contain
   ho_success_t success = nr_rrc_f1_ho_complete;
   ho_cancel_t cancel = nr_rrc_cancel_f1_ho;
   byte_array_t hpi = {.buf = buf, .len = size};
-  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel);
+  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel, false);
+}
+
+void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du)
+{
+  DevAssert(rrc != NULL);
+  DevAssert(ue != NULL);
+
+  uint8_t buf[NR_RRC_BUF_SIZE];
+  int size = do_NR_HandoverPreparationInformation(ue->ue_cap_buffer.buf, ue->ue_cap_buffer.len, buf, sizeof buf);
+
+  ho_req_ack_t ack = nr_rrc_f1_ho_acknowledge;
+  ho_success_t success = nr_rrc_f1_ho_complete;
+  ho_cancel_t cancel = nr_rrc_cancel_f1_ho;
+  byte_array_t hpi = {.buf = buf, .len = size};
+  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel, true);
 }
 
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue)
