@@ -2134,23 +2134,6 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     DevAssert(resp->crnti != NULL);
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;
-    if (UE->ho_context->ltm_handover) {
-      if (resp->LTMConfiguration) {
-        LOG_I(NR_RRC,
-              "UE %u: Inter-gNB-DU LTM HO UE Context Setup Response with LTMConfiguration (SSB info len %zu)\n",
-              UE->rrc_ue_id,
-              resp->LTMConfiguration->sSBInformation.len);
-        if (resp->LTMConfiguration->completeCandidateConfigurationIndicator)
-          LOG_I(NR_RRC, "UE %u: LTM complete candidate configuration indicated\n", UE->rrc_ue_id);
-      }
-      if (resp->EarlySyncInformation)
-        LOG_I(NR_RRC,
-              "UE %u: LTM EarlySyncInformation received (TCI list len %zu)\n",
-              UE->rrc_ue_id,
-              resp->EarlySyncInformation->tCIStatesConfigurationsList.len);
-      if (resp->requestedTargetCellGlobalID)
-        LOG_I(NR_RRC, "UE %u: LTM target cell NRCGI 0x%lx confirmed by DU\n", UE->rrc_ue_id, resp->requestedTargetCellGlobalID->nRCellIdentity);
-    }
     UE->ho_context->target->ho_req_ack(rrc, UE);
   }
 }
