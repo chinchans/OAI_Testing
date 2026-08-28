@@ -39,6 +39,14 @@
 
 #include "uper_decoder.h"
 #include "uper_encoder.h"
+#include "aper_encoder.h"
+#include "NR_ServingCellConfigCommon.h"
+#include "NR_CellGroupConfig.h"
+#include "NR_FrequencyInfoDL.h"
+#include "F1AP_SSBInformation.h"
+#include "F1AP_SSBInformationItem.h"
+#include "F1AP_SSB-TF-Configuration.h"
+#include "F1AP_CompleteCandidateConfigurationIndicator.h"
 
 // Standarized 5QI values and Default Priority levels as mentioned in 3GPP TS 23.501 Table 5.7.4-1
 const uint64_t qos_fiveqi[26] = {1, 2, 3, 4, 65, 66, 67, 71, 72, 73, 74, 76, 5, 6, 7, 8, 9, 69, 70, 79, 80, 82, 83, 84, 85, 86};
@@ -604,6 +612,72 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   return UE;
 }
 
+static byte_array_t mac_aper_encode_to_ba(const asn_TYPE_descriptor_t *td, void *sptr)
+{
+  uint8_t *buf = NULL;
+  ssize_t len = aper_encode_to_new_buffer(td, NULL, sptr, (void **)&buf);
+  AssertFatal(len > 0, "APER encode failed for %s\n", td->name);
+  byte_array_t ba = create_byte_array((size_t)len, buf);
+  free(buf);
+  return ba;
+}
+
+static byte_array_t nr_rrc_uper_encode_to_ba_mac(const asn_TYPE_descriptor_t *td, void *sptr)
+{
+  uint8_t *buf = NULL;
+  ssize_t len = uper_encode_to_new_buffer(td, NULL, sptr, (void **)&buf);
+  AssertFatal(len > 0, "UPER encode failed for %s\n", td->name);
+  byte_array_t ba = create_byte_array((size_t)len, buf);
+  free(buf);
+  return ba;
+}
+
+static byte_array_t build_ssb_information_aper(const NR_ServingCellConfigCommon_t *scc)
+{
+  F1AP_SSBInformation_t ssb_info = {0};
+  asn1cSequenceAdd(ssb_info.sSBInformationList.list, F1AP_SSBInformationItem_t, ssb_item);
+  F1AP_SSB_TF_Configuration_t *ssb_cfg = &ssb_item->sSB_Configuration;
+  ssb_cfg->sSB_subcarrier_spacing = F1AP_SSB_TF_Configuration__sSB_subcarrier_spacing_kHz30;
+  ssb_cfg->sSB_Transmit_power = 0;
+  ssb_cfg->sSB_periodicity = F1AP_SSB_TF_Configuration__sSB_periodicity_ms20;
+  ssb_cfg->sSB_half_frame_offset = 0;
+  ssb_cfg->sSB_SFN_offset = 0;
+  if (scc && scc->downlinkConfigCommon && scc->downlinkConfigCommon->frequencyInfoDL) {
+    NR_FrequencyInfoDL_t *fid = scc->downlinkConfigCommon->frequencyInfoDL;
+    if (fid->absoluteFrequencySSB)
+      ssb_cfg->sSB_frequency = *fid->absoluteFrequencySSB;
+  }
+  if (scc && scc->physCellId)
+    ssb_item->pCI_NR = *scc->physCellId;
+  byte_array_t ba = mac_aper_encode_to_ba(&asn_DEF_F1AP_SSBInformation, &ssb_info);
+  ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_F1AP_SSBInformation, &ssb_info);
+  return ba;
+}
+
+static void fill_ltm_ue_context_setup_response(f1ap_ue_context_setup_resp_t *resp,
+                                               NR_CellGroupConfig_t *cell_group,
+                                               const NR_ServingCellConfigCommon_t *scc)
+{
+  resp->LTMConfiguration = calloc_or_fail(1, sizeof(*resp->LTMConfiguration));
+  resp->LTMConfiguration->sSBInformation = build_ssb_information_aper(scc);
+
+  byte_array_t ref_cfg = nr_rrc_uper_encode_to_ba_mac(&asn_DEF_NR_CellGroupConfig, cell_group);
+  resp->LTMConfiguration->referenceConfigurationInformation =
+      malloc_or_fail(sizeof(*resp->LTMConfiguration->referenceConfigurationInformation));
+  *resp->LTMConfiguration->referenceConfigurationInformation = ref_cfg;
+
+  resp->LTMConfiguration->completeCandidateConfigurationIndicator = malloc_or_fail(sizeof(int));
+  *resp->LTMConfiguration->completeCandidateConfigurationIndicator =
+      F1AP_CompleteCandidateConfigurationIndicator_complete;
+
+  resp->EarlySyncInformation = calloc_or_fail(1, sizeof(*resp->EarlySyncInformation));
+  resp->EarlySyncInformation->tCIStatesConfigurationsList_count = 1;
+  resp->EarlySyncInformation->tCIStatesConfigurationsList_array =
+      calloc_or_fail(1, sizeof(*resp->EarlySyncInformation->tCIStatesConfigurationsList_array));
+  resp->EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIStateID = 0;
+  resp->EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIState = create_byte_array(1, (const uint8_t[]){0});
+}
+
 void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
 {
   const bool is_SA = IS_SA_MODE(get_softmodem_params());
@@ -697,6 +771,9 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   configure_UE_BWP(mac, scc, UE, false, ss_type, -1, -1);
 
   NR_SCHED_UNLOCK(&mac->sched_lock);
+
+  if (req->LTMInformation_Setup != NULL)
+    fill_ltm_ue_context_setup_response(&resp, new_CellGroup, scc);
 
   mac->mac_rrc.ue_context_setup_response(&resp);
 
