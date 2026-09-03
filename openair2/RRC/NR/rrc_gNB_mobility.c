@@ -37,9 +37,6 @@
 #include "openair3/SECU/key_nas_deriver.h"
 #include "openair2/RRC/NR/rrc_gNB_NGAP.h"
 #include "NR_DL-DCCH-MessageType.h"
-#include "NR_CellGroupConfig.h"
-#include "uper_encoder.h"
-#include "F1AP_LTMIndicator.h"
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"
@@ -107,54 +104,6 @@ static int fill_drb_to_be_setup(const gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, f1ap_
     *drb->ul_pdcp_sn_len = rrc_drb->pdcp_config.pdcp_SN_SizeUL == 1 ? F1AP_PDCP_SN_18B : F1AP_PDCP_SN_12B;;
   }
   return nb_drb;
-}
-
-static byte_array_t nr_rrc_uper_encode_to_ba(const struct asn_TYPE_descriptor_s *td, void *sptr)
-{
-  uint8_t *buf = NULL;
-  ssize_t len = uper_encode_to_new_buffer(td, NULL, sptr, (void **)&buf);
-  AssertFatal(len > 0, "UPER encode failed for %s\n", td->name);
-  byte_array_t ba = create_byte_array((size_t)len, buf);
-  free(buf);
-  return ba;
-}
-
-static void fill_inter_du_ltm_ue_context_setup_req(f1ap_ue_context_setup_req_t *req,
-                                                   gNB_RRC_UE_t *ue,
-                                                   const nr_rrc_du_container_t *source_du,
-                                                   const nr_rrc_du_container_t *target_du,
-                                                   const f1ap_served_cell_info_t *target_cell)
-{
-  req->LTMInformation_Setup = calloc_or_fail(1, sizeof(*req->LTMInformation_Setup));
-  req->LTMInformation_Setup->LTMIndicator = F1AP_LTMIndicator_true;
-
-  if (ue->masterCellGroup) {
-    byte_array_t ref_cfg = nr_rrc_uper_encode_to_ba(&asn_DEF_NR_CellGroupConfig, ue->masterCellGroup);
-    req->LTMInformation_Setup->ReferenceConfiguration = malloc_or_fail(sizeof(*req->LTMInformation_Setup->ReferenceConfiguration));
-    *req->LTMInformation_Setup->ReferenceConfiguration = ref_cfg;
-  }
-
-  req->LTMConfigurationIDMappingList = calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList));
-  req->LTMConfigurationIDMappingList->list_count = 1;
-  req->LTMConfigurationIDMappingList->list_array = calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList->list_array));
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_plmn = target_cell->plmn;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMConfigurationID = 1;
-
-  req->EarlySyncInformation_Request = calloc_or_fail(1, sizeof(*req->EarlySyncInformation_Request));
-  req->EarlySyncInformation_Request->RequestforRACHConfiguration = malloc_or_fail(sizeof(byte_array_t));
-  *req->EarlySyncInformation_Request->RequestforRACHConfiguration = create_byte_array(0, NULL);
-
-  int n_du = 0;
-  uint64_t du_ids[2];
-  if (source_du)
-    du_ids[n_du++] = source_du->setup_req->gNB_DU_id;
-  du_ids[n_du++] = target_du->setup_req->gNB_DU_id;
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_count = n_du;
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array =
-      calloc_or_fail(n_du, sizeof(*req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array));
-  for (int i = 0; i < n_du; ++i)
-    req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array[i].lTMgNB_DU_ID = du_ids[i];
 }
 
 /* \brief Initiate a handover of UE to a specific target cell handled by this
@@ -254,8 +203,6 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
-  if (source_du != NULL)
-    fill_inter_du_ltm_ue_context_setup_req(&ue_context_setup_req, ue, source_du, target_du, cell_info);
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }

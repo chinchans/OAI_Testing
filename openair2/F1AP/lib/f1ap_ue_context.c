@@ -30,23 +30,6 @@
  #include "common/utils/oai_asn1.h"
  #include "common/utils/utils.h"
  #include "common/utils/ds/byte_array.h"
- #include "aper_encoder.h"
- #include "aper_decoder.h"
- #include "F1AP_LTMInformation-Setup.h"
- #include "F1AP_LTMConfiguration.h"
- #include "F1AP_LTMConfigurationIDMappingList.h"
- #include "F1AP_LTMConfigurationIDMapping-Item.h"
- #include "F1AP_EarlySyncInformation-Request.h"
- #include "F1AP_EarlySyncInformation.h"
- #include "F1AP_LTMgNB-DU-IDsList.h"
- #include "F1AP_LTMgNB-DU-IDs-Item.h"
- #include "F1AP_ReferenceConfiguration.h"
- #include "F1AP_CSIResourceConfiguration.h"
- #include "F1AP_SSBInformation.h"
- #include "F1AP_LTMIndicator.h"
- #include "F1AP_CompleteCandidateConfigurationIndicator.h"
- #include "F1AP_RequestforRACHConfiguration.h"
- #include "F1AP_EarlyULSyncConfig.h"
  
  static F1AP_CUtoDURRCInformation_t encode_cu_to_du_rrc_info(const f1ap_cu_to_du_rrc_info_t *cu2du)
  {
@@ -1237,251 +1220,6 @@
    return true;
  }
  
- static bool ba_from_aper_encode(const asn_TYPE_descriptor_t *td, void *sptr, byte_array_t *out)
- {
-   uint8_t *buf = NULL;
-   ssize_t len = aper_encode_to_new_buffer(td, NULL, sptr, (void **)&buf);
-   if (len <= 0)
-     return false;
-   *out = create_byte_array((size_t)len, buf);
-   free(buf);
-   return true;
- }
- 
- static bool decode_ssb_information_aper(const byte_array_t *ba, F1AP_SSBInformation_t **out)
- {
-   asn_dec_rval_t dec = aper_decode(NULL, &asn_DEF_F1AP_SSBInformation, (void **)out, ba->buf, ba->len, 0, 0);
-   return dec.code == RC_OK && *out != NULL;
- }
- 
- static F1AP_LTMInformation_Setup_t encode_LTMInformation_Setup(const f1ap_LTMInformation_Setup_t *src)
- {
-   F1AP_LTMInformation_Setup_t enc = {0};
-   enc.lTMIndicator = src->LTMIndicator;
-   if (src->ReferenceConfiguration) {
-     asn1cCalloc(enc.referenceConfiguration, rc);
-     rc->present = F1AP_ReferenceConfiguration_PR_referenceConfiguration;
-     OCTET_STRING_fromBuf(&rc->choice.referenceConfiguration,
-                          (const char *)src->ReferenceConfiguration->buf,
-                          src->ReferenceConfiguration->len);
-   }
-   if (src->cSIResourceConfigToAddModList || src->cSIResourceConfigToReleaseList) {
-     asn1cCalloc(enc.cSIResourceConfiguration, csi);
-     if (src->cSIResourceConfigToAddModList) {
-       asn1cCalloc(csi->cSIResourceConfigToAddModList, add);
-       OCTET_STRING_fromBuf(add,
-                            (const char *)src->cSIResourceConfigToAddModList->buf,
-                            src->cSIResourceConfigToAddModList->len);
-     }
-     if (src->cSIResourceConfigToReleaseList) {
-       asn1cCalloc(csi->cSIResourceConfigToReleaseList, rel);
-       OCTET_STRING_fromBuf(rel,
-                            (const char *)src->cSIResourceConfigToReleaseList->buf,
-                            src->cSIResourceConfigToReleaseList->len);
-     }
-   }
-   return enc;
- }
- 
- static bool decode_LTMInformation_Setup(const F1AP_LTMInformation_Setup_t *asn, f1ap_LTMInformation_Setup_t **out)
- {
-   f1ap_LTMInformation_Setup_t *dec = calloc_or_fail(1, sizeof(*dec));
-   dec->LTMIndicator = asn->lTMIndicator;
-   if (asn->referenceConfiguration
-       && asn->referenceConfiguration->present == F1AP_ReferenceConfiguration_PR_referenceConfiguration) {
-     const OCTET_STRING_t *os = &asn->referenceConfiguration->choice.referenceConfiguration;
-     dec->ReferenceConfiguration = malloc_or_fail(sizeof(*dec->ReferenceConfiguration));
-     *dec->ReferenceConfiguration = create_byte_array(os->size, (uint8_t *)os->buf);
-   }
-   if (asn->cSIResourceConfiguration) {
-     const F1AP_CSIResourceConfiguration_t *csi = asn->cSIResourceConfiguration;
-     if (csi->cSIResourceConfigToAddModList) {
-       dec->cSIResourceConfigToAddModList = malloc_or_fail(sizeof(*dec->cSIResourceConfigToAddModList));
-       *dec->cSIResourceConfigToAddModList =
-           create_byte_array(csi->cSIResourceConfigToAddModList->size, (uint8_t *)csi->cSIResourceConfigToAddModList->buf);
-     }
-     if (csi->cSIResourceConfigToReleaseList) {
-       dec->cSIResourceConfigToReleaseList = malloc_or_fail(sizeof(*dec->cSIResourceConfigToReleaseList));
-       *dec->cSIResourceConfigToReleaseList =
-           create_byte_array(csi->cSIResourceConfigToReleaseList->size, (uint8_t *)csi->cSIResourceConfigToReleaseList->buf);
-     }
-   }
-   *out = dec;
-   return true;
- }
- 
- static F1AP_LTMConfigurationIDMappingList_t encode_LTMConfigurationIDMappingList(const f1ap_LTMConfigurationIDMappingList_t *src)
- {
-   F1AP_LTMConfigurationIDMappingList_t list = {0};
-   for (int i = 0; i < src->list_count; ++i) {
-     const f1ap_LTMConfigurationIDMapping_Item_t *item = &src->list_array[i];
-     asn1cSequenceAdd(list.list, F1AP_LTMConfigurationIDMapping_Item_t, it);
-     const plmn_id_t *plmn = &item->lTMCellID_plmn;
-     MCC_MNC_TO_PLMNID(plmn->mcc, plmn->mnc, plmn->mnc_digit_length, &it->lTMCellID.pLMN_Identity);
-     NR_CELL_ID_TO_BIT_STRING(item->lTMCellID_nr_cellid, &it->lTMCellID.nRCellIdentity);
-     it->lTMConfigurationID = item->lTMConfigurationID;
-   }
-   return list;
- }
- 
- static bool decode_LTMConfigurationIDMappingList(const F1AP_LTMConfigurationIDMappingList_t *asn,
-                                                  f1ap_LTMConfigurationIDMappingList_t **out)
- {
-   int count = asn->list.count;
-   if (count <= 0)
-     return true;
-   f1ap_LTMConfigurationIDMappingList_t *dec = calloc_or_fail(1, sizeof(*dec));
-   dec->list_count = count;
-   dec->list_array = calloc_or_fail((size_t)count, sizeof(*dec->list_array));
-   for (int i = 0; i < count; ++i) {
-     const F1AP_LTMConfigurationIDMapping_Item_t *it = asn->list.array[i];
-     PLMNID_TO_MCC_MNC(&it->lTMCellID.pLMN_Identity,
-                       dec->list_array[i].lTMCellID_plmn.mcc,
-                       dec->list_array[i].lTMCellID_plmn.mnc,
-                       dec->list_array[i].lTMCellID_plmn.mnc_digit_length);
-     BIT_STRING_TO_NR_CELL_IDENTITY(&it->lTMCellID.nRCellIdentity, dec->list_array[i].lTMCellID_nr_cellid);
-     dec->list_array[i].lTMConfigurationID = (uint8_t)it->lTMConfigurationID;
-   }
-   *out = dec;
-   return true;
- }
- 
- static F1AP_EarlySyncInformation_Request_t encode_EarlySyncInformation_Request(const f1ap_EarlySyncInformation_Request_t *src)
- {
-   F1AP_EarlySyncInformation_Request_t enc = {0};
-   if (src->RequestforRACHConfiguration)
-     enc.requestforRACHConfiguration = F1AP_RequestforRACHConfiguration_true;
-   for (int i = 0; i < src->LTMgNB_DU_IDsList_count; ++i) {
-     asn1cSequenceAdd(enc.lTMgNB_DU_IDsList.list, F1AP_LTMgNB_DU_IDs_Item_t, du_item);
-     asn_long2INTEGER(&du_item->lTMgNB_DU_ID, src->LTMgNB_DU_IDsList_array[i].lTMgNB_DU_ID);
-   }
-   return enc;
- }
- 
- static bool decode_EarlySyncInformation_Request(const F1AP_EarlySyncInformation_Request_t *asn,
-                                                 f1ap_EarlySyncInformation_Request_t **out)
- {
-   f1ap_EarlySyncInformation_Request_t *dec = calloc_or_fail(1, sizeof(*dec));
-   dec->RequestforRACHConfiguration = malloc_or_fail(sizeof(*dec->RequestforRACHConfiguration));
-   *dec->RequestforRACHConfiguration = create_byte_array(0, NULL);
-   dec->LTMgNB_DU_IDsList_count = asn->lTMgNB_DU_IDsList.list.count;
-   if (dec->LTMgNB_DU_IDsList_count > 0) {
-     dec->LTMgNB_DU_IDsList_array =
-         calloc_or_fail((size_t)dec->LTMgNB_DU_IDsList_count, sizeof(*dec->LTMgNB_DU_IDsList_array));
-     for (int i = 0; i < dec->LTMgNB_DU_IDsList_count; ++i) {
-       const F1AP_LTMgNB_DU_IDs_Item_t *du_item = asn->lTMgNB_DU_IDsList.list.array[i];
-       asn_INTEGER2uint64(&du_item->lTMgNB_DU_ID, &dec->LTMgNB_DU_IDsList_array[i].lTMgNB_DU_ID);
-     }
-   }
-   *out = dec;
-   return true;
- }
- 
- static F1AP_LTMConfiguration_t encode_LTMConfiguration(const f1ap_LTMConfiguration_t *src)
- {
-   F1AP_LTMConfiguration_t enc = {0};
-   F1AP_SSBInformation_t *ssb = NULL;
-   AssertFatal(decode_ssb_information_aper(&src->sSBInformation, &ssb), "LTMConfiguration SSBInformation APER decode failed\n");
-   enc.sSBInformation = *ssb;
-   free(ssb);
-   if (src->referenceConfigurationInformation) {
-     asn1cCalloc(enc.referenceConfigurationInformation, rci);
-     OCTET_STRING_fromBuf(rci,
-                          (const char *)src->referenceConfigurationInformation->buf,
-                          src->referenceConfigurationInformation->len);
-   }
-   if (src->completeCandidateConfigurationIndicator) {
-     asn1cCalloc(enc.completeCandidateConfigurationIndicator, cci);
-     *cci = *src->completeCandidateConfigurationIndicator;
-   }
-   if (src->lTMCFRAResourceConfig) {
-     asn1cCalloc(enc.lTMCFRAResourceConfig, cfg);
-     OCTET_STRING_fromBuf(cfg, (const char *)src->lTMCFRAResourceConfig->buf, src->lTMCFRAResourceConfig->len);
-   }
-   if (src->lTMCFRAResourceConfigSUL) {
-     asn1cCalloc(enc.lTMCFRAResourceConfigSUL, cfg);
-     OCTET_STRING_fromBuf(cfg, (const char *)src->lTMCFRAResourceConfigSUL->buf, src->lTMCFRAResourceConfigSUL->len);
-   }
-   return enc;
- }
- 
- static bool decode_LTMConfiguration(const F1AP_LTMConfiguration_t *asn, f1ap_LTMConfiguration_t **out)
- {
-   f1ap_LTMConfiguration_t *dec = calloc_or_fail(1, sizeof(*dec));
-   if (!ba_from_aper_encode(&asn_DEF_F1AP_SSBInformation, (void *)&asn->sSBInformation, &dec->sSBInformation))
-     return false;
-   if (asn->referenceConfigurationInformation) {
-     dec->referenceConfigurationInformation = malloc_or_fail(sizeof(*dec->referenceConfigurationInformation));
-     *dec->referenceConfigurationInformation =
-         create_byte_array(asn->referenceConfigurationInformation->size, (uint8_t *)asn->referenceConfigurationInformation->buf);
-   }
-   if (asn->completeCandidateConfigurationIndicator) {
-     dec->completeCandidateConfigurationIndicator = malloc_or_fail(sizeof(*dec->completeCandidateConfigurationIndicator));
-     *dec->completeCandidateConfigurationIndicator = (int)*asn->completeCandidateConfigurationIndicator;
-   }
-   if (asn->lTMCFRAResourceConfig) {
-     dec->lTMCFRAResourceConfig = malloc_or_fail(sizeof(*dec->lTMCFRAResourceConfig));
-     *dec->lTMCFRAResourceConfig = create_byte_array(asn->lTMCFRAResourceConfig->size, (uint8_t *)asn->lTMCFRAResourceConfig->buf);
-   }
-   if (asn->lTMCFRAResourceConfigSUL) {
-     dec->lTMCFRAResourceConfigSUL = malloc_or_fail(sizeof(*dec->lTMCFRAResourceConfigSUL));
-     *dec->lTMCFRAResourceConfigSUL =
-         create_byte_array(asn->lTMCFRAResourceConfigSUL->size, (uint8_t *)asn->lTMCFRAResourceConfigSUL->buf);
-   }
-   *out = dec;
-   return true;
- }
- 
- static F1AP_EarlySyncInformation_t encode_EarlySyncInformation(const f1ap_EarlySyncInformation_t *src)
- {
-   F1AP_EarlySyncInformation_t enc = {0};
-   if (src->tCIStatesConfigurationsList_count > 0 && src->tCIStatesConfigurationsList_array) {
-     const byte_array_t *ba = &src->tCIStatesConfigurationsList_array[0].tCIState;
-     OCTET_STRING_fromBuf(&enc.tCIStatesConfigurationsList, (const char *)ba->buf, ba->len);
-   }
-   if (src->earlyULSyncConfig) {
-     F1AP_EarlyULSyncConfig_t *cfg = NULL;
-     asn_dec_rval_t dec =
-         aper_decode(NULL, &asn_DEF_F1AP_EarlyULSyncConfig, (void **)&cfg, src->earlyULSyncConfig->buf, src->earlyULSyncConfig->len, 0, 0);
-     AssertFatal(dec.code == RC_OK && cfg, "EarlyULSyncConfig APER decode failed\n");
-     asn1cCalloc(enc.earlyULSyncConfig, enc_cfg);
-     *enc_cfg = *cfg;
-     free(cfg);
-   }
-   if (src->earlyULSyncConfigSUL) {
-     F1AP_EarlyULSyncConfig_t *cfg = NULL;
-     asn_dec_rval_t dec =
-         aper_decode(NULL, &asn_DEF_F1AP_EarlyULSyncConfig, (void **)&cfg, src->earlyULSyncConfigSUL->buf, src->earlyULSyncConfigSUL->len, 0, 0);
-     AssertFatal(dec.code == RC_OK && cfg, "EarlyULSyncConfigSUL APER decode failed\n");
-     asn1cCalloc(enc.earlyULSyncConfigSUL, enc_cfg);
-     *enc_cfg = *cfg;
-     free(cfg);
-   }
-   return enc;
- }
- 
- static bool decode_EarlySyncInformation(const F1AP_EarlySyncInformation_t *asn, f1ap_EarlySyncInformation_t **out)
- {
-   f1ap_EarlySyncInformation_t *dec = calloc_or_fail(1, sizeof(*dec));
-   dec->tCIStatesConfigurationsList_count = 1;
-   dec->tCIStatesConfigurationsList_array = calloc_or_fail(1, sizeof(*dec->tCIStatesConfigurationsList_array));
-   dec->tCIStatesConfigurationsList_array[0].tCIStateID = 0;
-   dec->tCIStatesConfigurationsList_array[0].tCIState =
-       create_byte_array(asn->tCIStatesConfigurationsList.size, (uint8_t *)asn->tCIStatesConfigurationsList.buf);
-   if (asn->earlyULSyncConfig) {
-     dec->earlyULSyncConfig = malloc_or_fail(sizeof(*dec->earlyULSyncConfig));
-     if (!ba_from_aper_encode(&asn_DEF_F1AP_EarlyULSyncConfig, asn->earlyULSyncConfig, dec->earlyULSyncConfig))
-       return false;
-   }
-   if (asn->earlyULSyncConfigSUL) {
-     dec->earlyULSyncConfigSUL = malloc_or_fail(sizeof(*dec->earlyULSyncConfigSUL));
-     if (!ba_from_aper_encode(&asn_DEF_F1AP_EarlyULSyncConfig, asn->earlyULSyncConfigSUL, dec->earlyULSyncConfigSUL))
-       return false;
-   }
-   *out = dec;
-   return true;
- }
- 
  /**
   * @brief Encode F1 UE context setup request to ASN.1
   */
@@ -1573,28 +1311,10 @@
      asn_long2INTEGER(&ie->value.choice.BitRate, *req->gnb_du_ue_agg_mbr_ul);
    }
  
-   /* Optional LTM IEs for Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5) */
-   if (req->LTMInformation_Setup) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupRequestIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_LTMInformation_Setup;
-     ie->criticality = F1AP_Criticality_reject;
-     ie->value.present = F1AP_UEContextSetupRequestIEs__value_PR_LTMInformation_Setup;
-     ie->value.choice.LTMInformation_Setup = encode_LTMInformation_Setup(req->LTMInformation_Setup);
-   }
-   if (req->LTMConfigurationIDMappingList) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupRequestIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_LTMConfigurationIDMappingList;
-     ie->criticality = F1AP_Criticality_reject;
-     ie->value.present = F1AP_UEContextSetupRequestIEs__value_PR_LTMConfigurationIDMappingList;
-     ie->value.choice.LTMConfigurationIDMappingList = encode_LTMConfigurationIDMappingList(req->LTMConfigurationIDMappingList);
-   }
-   if (req->EarlySyncInformation_Request) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupRequestIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_EarlySyncInformation_Request;
-     ie->criticality = F1AP_Criticality_ignore;
-     ie->value.present = F1AP_UEContextSetupRequestIEs__value_PR_EarlySyncInformation_Request;
-     ie->value.choice.EarlySyncInformation_Request = encode_EarlySyncInformation_Request(req->EarlySyncInformation_Request);
-   }
+   /* Optional LTM IEs (id-LTMInformation-Setup, id-LTMConfigurationIDMappingList,
+    * id-EarlySyncInformation-Request) for Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5):
+    * carried in req->LTMInformation_Setup, req->LTMConfigurationIDMappingList,
+    * req->EarlySyncInformation_Request. Encode when ASN.1 definitions are added by third-party. */
  
    return pdu;
  }
@@ -1670,21 +1390,9 @@
          out->gnb_du_ue_agg_mbr_ul = malloc_or_fail(sizeof(*out->gnb_du_ue_agg_mbr_ul));
          asn_INTEGER2uint64(&ie->value.choice.BitRate, out->gnb_du_ue_agg_mbr_ul);
          break;
-       case F1AP_ProtocolIE_ID_id_LTMInformation_Setup:
-         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupRequestIEs__value_PR_LTMInformation_Setup);
-         _F1_CHECK_EXP(decode_LTMInformation_Setup(&ie->value.choice.LTMInformation_Setup, &out->LTMInformation_Setup));
-         break;
-       case F1AP_ProtocolIE_ID_id_LTMConfigurationIDMappingList:
-         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupRequestIEs__value_PR_LTMConfigurationIDMappingList);
-         _F1_CHECK_EXP(decode_LTMConfigurationIDMappingList(&ie->value.choice.LTMConfigurationIDMappingList,
-                                                            &out->LTMConfigurationIDMappingList));
-         break;
-       case F1AP_ProtocolIE_ID_id_EarlySyncInformation_Request:
-         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupRequestIEs__value_PR_EarlySyncInformation_Request);
-         _F1_CHECK_EXP(decode_EarlySyncInformation_Request(&ie->value.choice.EarlySyncInformation_Request,
-                                                            &out->EarlySyncInformation_Request));
-         break;
-       /* Optional LTM IEs for Inter-gNB-DU LTM Handover */
+       /* Optional LTM IEs (id-LTMInformation-Setup, id-LTMConfigurationIDMappingList,
+        * id-EarlySyncInformation-Request) for Inter-gNB-DU LTM Handover: decode when ASN.1
+        * definitions are added by third-party; then populate out->LTMInformation_Setup, etc. */
        default:
          PRINT_ERROR("F1AP_ProtocolIE_ID_id %ld unknown, skipping\n", ie->id);
          break;
@@ -1978,21 +1686,10 @@
      ie11->value.choice.SRBs_Setup_List = encode_srbs_setup(msg->srbs_len, msg->srbs);
    }
  
-   /* Optional LTM IEs for Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5, TS 38.473 9.2.2.2) */
-   if (msg->EarlySyncInformation) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupResponseIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_EarlySyncInformation;
-     ie->criticality = F1AP_Criticality_ignore;
-     ie->value.present = F1AP_UEContextSetupResponseIEs__value_PR_EarlySyncInformation;
-     ie->value.choice.EarlySyncInformation = encode_EarlySyncInformation(msg->EarlySyncInformation);
-   }
-   if (msg->LTMConfiguration) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupResponseIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_LTMConfiguration;
-     ie->criticality = F1AP_Criticality_ignore;
-     ie->value.present = F1AP_UEContextSetupResponseIEs__value_PR_LTMConfiguration;
-     ie->value.choice.LTMConfiguration = encode_LTMConfiguration(msg->LTMConfiguration);
-   }
+   /* Optional LTM IEs (id-requestedTargetCellGlobalID, id-EarlySyncInformation, id-LTMConfiguration)
+    * for Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5, TS 38.473 9.2.2.2): carried in
+    * msg->requestedTargetCellGlobalID, msg->EarlySyncInformation, msg->LTMConfiguration.
+    * Encode when ASN.1 definitions are added by third-party. */
  
    return pdu;
  }
@@ -2040,15 +1737,9 @@
          _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupResponseIEs__value_PR_SRBs_Setup_List);
          _F1_CHECK_EXP(decode_srbs_setup(&ie->value.choice.SRBs_Setup_List, &out->srbs_len, &out->srbs));
          break;
-       case F1AP_ProtocolIE_ID_id_EarlySyncInformation:
-         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupResponseIEs__value_PR_EarlySyncInformation);
-         _F1_CHECK_EXP(decode_EarlySyncInformation(&ie->value.choice.EarlySyncInformation, &out->EarlySyncInformation));
-         break;
-       case F1AP_ProtocolIE_ID_id_LTMConfiguration:
-         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextSetupResponseIEs__value_PR_LTMConfiguration);
-         _F1_CHECK_EXP(decode_LTMConfiguration(&ie->value.choice.LTMConfiguration, &out->LTMConfiguration));
-         break;
-       /* Optional LTM IEs for Inter-gNB-DU LTM Handover */
+       /* Optional LTM IEs (id-requestedTargetCellGlobalID, id-EarlySyncInformation, id-LTMConfiguration)
+        * for Inter-gNB-DU LTM Handover: decode when ASN.1 definitions are added by third-party;
+        * then populate out->requestedTargetCellGlobalID, out->EarlySyncInformation, out->LTMConfiguration. */
        default:
          PRINT_ERROR("F1AP_ProtocolIE_ID_id %ld unknown, skipping\n", ie->id);
          break;

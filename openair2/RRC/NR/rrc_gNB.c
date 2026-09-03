@@ -2134,25 +2134,6 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     DevAssert(resp->crnti != NULL);
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;
-    if (resp->LTMConfiguration) {
-      LOG_I(RRC,
-            "UE %u: Inter-gNB-DU LTM UE Context Setup Response with LTMConfiguration (SSB info %zu bytes)\n",
-            UE->rrc_ue_id,
-            resp->LTMConfiguration->sSBInformation.len);
-      if (resp->LTMConfiguration->referenceConfigurationInformation)
-        LOG_I(RRC,
-              "UE %u: LTM referenceConfigurationInformation %zu bytes\n",
-              UE->rrc_ue_id,
-              resp->LTMConfiguration->referenceConfigurationInformation->len);
-      if (resp->LTMConfiguration->completeCandidateConfigurationIndicator)
-        LOG_I(RRC, "UE %u: complete candidate configuration indicated in LTMConfiguration\n", UE->rrc_ue_id);
-    }
-    if (resp->EarlySyncInformation) {
-      LOG_I(RRC,
-            "UE %u: EarlySyncInformation with %d TCI state configuration entries\n",
-            UE->rrc_ue_id,
-            resp->EarlySyncInformation->tCIStatesConfigurationsList_count);
-    }
     UE->ho_context->target->ho_req_ack(rrc, UE);
   }
 }
