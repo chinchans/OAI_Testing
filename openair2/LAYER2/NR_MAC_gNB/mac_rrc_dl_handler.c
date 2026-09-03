@@ -604,6 +604,39 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   return UE;
 }
 
+/* Inter-gNB-DU LTM Handover: populate scoped UE CONTEXT SETUP RESPONSE LTM IEs (TS 38.473 9.2.2.2) */
+static void fill_ltm_ue_context_setup_resp(f1ap_ue_context_setup_resp_t *resp,
+                                           const f1ap_ue_context_setup_req_t *req,
+                                           gNB_MAC_INST *mac)
+{
+  if (req->LTMInformation_Setup == NULL)
+    return;
+
+  NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
+  DevAssert(scc != NULL && scc->physCellId != NULL);
+
+  f1ap_LTMConfiguration_t *ltm = calloc_or_fail(1, sizeof(*ltm));
+  ltm->ssb_information_list_count = 1;
+  ltm->ssb_information_list = calloc_or_fail(1, sizeof(*ltm->ssb_information_list));
+  ltm->ssb_information_list[0].pci_nr = *scc->physCellId;
+  if (scc->downlinkConfigCommon && scc->downlinkConfigCommon->frequencyInfoDL
+      && scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB) {
+    ltm->ssb_information_list[0].ssb_frequency = *scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
+  }
+  if (scc->ssbSubcarrierSpacing)
+    ltm->ssb_information_list[0].ssb_subcarrier_spacing = *scc->ssbSubcarrierSpacing;
+  else
+    ltm->ssb_information_list[0].ssb_subcarrier_spacing = 1; /* kHz30 */
+  resp->LTMConfiguration = ltm;
+
+  if (req->EarlySyncInformation_Request != NULL) {
+    f1ap_EarlySyncInformation_t *esi = calloc_or_fail(1, sizeof(*esi));
+    uint8_t tci_placeholder = 0;
+    esi->tCIStatesConfigurationsList = create_byte_array(1, &tci_placeholder);
+    resp->EarlySyncInformation = esi;
+  }
+}
+
 void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
 {
   const bool is_SA = IS_SA_MODE(get_softmodem_params());
@@ -697,6 +730,8 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   configure_UE_BWP(mac, scc, UE, false, ss_type, -1, -1);
 
   NR_SCHED_UNLOCK(&mac->sched_lock);
+
+  fill_ltm_ue_context_setup_resp(&resp, req, mac);
 
   mac->mac_rrc.ue_context_setup_response(&resp);
 

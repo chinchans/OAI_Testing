@@ -521,17 +521,17 @@
    f1ap_LTMConfigurationIDMapping_Item_t *list_array;
  } f1ap_LTMConfigurationIDMappingList_t;
  
- /* EarlySyncInformation-Request: RequestforRACHConfiguration, LTMgNB-DU-IDsList */
- #define F1AP_MAX_NO_LTM_GNB_DU_IDS 16
- typedef struct f1ap_LTMgNB_DU_IDs_Item_s {
-   uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
- } f1ap_LTMgNB_DU_IDs_Item_t;
- 
- typedef struct f1ap_EarlySyncInformation_Request_s {
-   byte_array_t *RequestforRACHConfiguration; /* OCTET STRING */
-   int LTMgNB_DU_IDsList_count;
-   f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
- } f1ap_EarlySyncInformation_Request_t;
+/* EarlySyncInformation-Request: RequestforRACHConfiguration, LTMgNB-DU-IDsList */
+#define F1AP_MAX_NO_LTM_GNB_DU_IDS 16
+typedef struct f1ap_LTMgNB_DU_IDs_Item_s {
+  uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
+} f1ap_LTMgNB_DU_IDs_Item_t;
+
+typedef struct f1ap_EarlySyncInformation_Request_s {
+  bool requestforRACHConfiguration; /* RequestforRACHConfiguration ::= ENUMERATED { true } */
+  int LTMgNB_DU_IDsList_count;
+  f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
+} f1ap_EarlySyncInformation_Request_t;
  
  typedef struct f1ap_ue_context_setup_req_s {
    uint32_t gNB_CU_ue_id;
@@ -566,29 +566,28 @@
    uint64_t nRCellIdentity;
  } f1ap_requestedTargetCellGlobalID_t;
  
- /* TCIStatesConfigurationsItem: tCIStateID (0..127), tCIState OCTET STRING */
- #define F1AP_MAX_NO_TCI_STATES 128
- typedef struct f1ap_TCIStatesConfigurationsItem_s {
-   uint8_t tCIStateID;
-   byte_array_t tCIState;
- } f1ap_TCIStatesConfigurationsItem_t;
- 
- /* EarlySyncInformation: tCIStatesConfigurationsList, earlyULSyncConfig optional, earlyULSyncConfigSUL optional */
- typedef struct f1ap_EarlySyncInformation_s {
-   int tCIStatesConfigurationsList_count;
-   f1ap_TCIStatesConfigurationsItem_t *tCIStatesConfigurationsList_array;
-   byte_array_t *earlyULSyncConfig;    /* EarlyULSyncConfig as OCTET STRING for RRC container */
-   byte_array_t *earlyULSyncConfigSUL;
- } f1ap_EarlySyncInformation_t;
- 
- /* LTMConfiguration: sSBInformation, referenceConfigurationInformation optional, etc. */
- typedef struct f1ap_LTMConfiguration_s {
-   byte_array_t sSBInformation;                              /* SSBInformation ::= OCTET STRING */
-   byte_array_t *referenceConfigurationInformation;          /* optional */
-   int *completeCandidateConfigurationIndicator;             /* ENUMERATED { complete, ... } optional */
-   byte_array_t *lTMCFRAResourceConfig;                      /* optional */
-   byte_array_t *lTMCFRAResourceConfigSUL;                   /* optional */
- } f1ap_LTMConfiguration_t;
+/* EarlySyncInformation: tCIStatesConfigurationsList, earlyULSyncConfig optional, earlyULSyncConfigSUL optional */
+typedef struct f1ap_EarlySyncInformation_s {
+  byte_array_t tCIStatesConfigurationsList; /* TCIStatesConfigurationsList ::= OCTET STRING */
+  byte_array_t *earlyULSyncConfig;          /* EarlyULSyncConfig as OCTET STRING for RRC container */
+  byte_array_t *earlyULSyncConfigSUL;
+} f1ap_EarlySyncInformation_t;
+
+typedef struct f1ap_ssb_information_item_s {
+  uint32_t ssb_frequency;
+  int ssb_subcarrier_spacing; /* ASN.1 SSB-TF-Configuration sSB-subcarrier-spacing */
+  int pci_nr;
+} f1ap_ssb_information_item_t;
+
+/* LTMConfiguration: sSBInformation, referenceConfigurationInformation optional, etc. */
+typedef struct f1ap_LTMConfiguration_s {
+  int ssb_information_list_count;
+  f1ap_ssb_information_item_t *ssb_information_list;      /* mandatory when LTMConfiguration is set */
+  byte_array_t *referenceConfigurationInformation;          /* optional */
+  int *completeCandidateConfigurationIndicator;             /* ENUMERATED { complete, ... } optional */
+  byte_array_t *lTMCFRAResourceConfig;                      /* optional */
+  byte_array_t *lTMCFRAResourceConfigSUL;                   /* optional */
+} f1ap_LTMConfiguration_t;
  
  typedef struct f1ap_ue_context_setup_resp_s {
    uint32_t gNB_CU_ue_id;

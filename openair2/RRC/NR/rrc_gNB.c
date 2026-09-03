@@ -2134,6 +2134,14 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     DevAssert(resp->crnti != NULL);
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;
+    if (resp->LTMConfiguration != NULL) {
+      DevAssert(resp->LTMConfiguration->ssb_information_list_count > 0);
+      LOG_I(NR_RRC,
+            "UE %u: LTM UE Context Setup complete, target PCI %d, %d SSB item(s)\n",
+            UE->rrc_ue_id,
+            resp->LTMConfiguration->ssb_information_list[0].pci_nr,
+            resp->LTMConfiguration->ssb_information_list_count);
+    }
     UE->ho_context->target->ho_req_ack(rrc, UE);
   }
 }

@@ -106,6 +106,37 @@ static int fill_drb_to_be_setup(const gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, f1ap_
   return nb_drb;
 }
 
+/* Inter-gNB-DU LTM Handover: populate scoped UE CONTEXT SETUP REQUEST LTM IEs (TS 38.401 8.2.1.5) */
+static void fill_ltm_ue_context_setup_req(f1ap_ue_context_setup_req_t *req,
+                                          const nr_rrc_du_container_t *source_du,
+                                          const nr_rrc_du_container_t *target_du)
+{
+  if (source_du == NULL || target_du == NULL)
+    return;
+
+  f1ap_served_cell_info_t *target_cell = &target_du->setup_req->cell[0].info;
+
+  f1ap_LTMInformation_Setup_t *ltm_setup = calloc_or_fail(1, sizeof(*ltm_setup));
+  ltm_setup->LTMIndicator = 0; /* LTMIndicator ::= ENUMERATED { true } */
+  req->LTMInformation_Setup = ltm_setup;
+
+  f1ap_LTMConfigurationIDMappingList_t *mapping = calloc_or_fail(1, sizeof(*mapping));
+  mapping->list_count = 1;
+  mapping->list_array = calloc_or_fail(1, sizeof(*mapping->list_array));
+  mapping->list_array[0].lTMCellID_plmn = target_cell->plmn;
+  mapping->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
+  mapping->list_array[0].lTMConfigurationID = 1;
+  req->LTMConfigurationIDMappingList = mapping;
+
+  f1ap_EarlySyncInformation_Request_t *early_sync = calloc_or_fail(1, sizeof(*early_sync));
+  early_sync->requestforRACHConfiguration = true;
+  early_sync->LTMgNB_DU_IDsList_count = 2;
+  early_sync->LTMgNB_DU_IDsList_array = calloc_or_fail(2, sizeof(*early_sync->LTMgNB_DU_IDsList_array));
+  early_sync->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = source_du->setup_req->gNB_DU_id;
+  early_sync->LTMgNB_DU_IDsList_array[1].lTMgNB_DU_ID = target_du->setup_req->gNB_DU_id;
+  req->EarlySyncInformation_Request = early_sync;
+}
+
 /* \brief Initiate a handover of UE to a specific target cell handled by this
  * CU.
  * \param ue a UE context for which the handover should be triggered. The UE
@@ -203,6 +234,7 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
+  fill_ltm_ue_context_setup_req(&ue_context_setup_req, source_du, target_du);
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }
