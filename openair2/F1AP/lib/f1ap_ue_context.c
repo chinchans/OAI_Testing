@@ -1690,7 +1690,7 @@
     * for Inter-gNB-DU LTM Handover (TS 38.401 8.2.1.5, TS 38.473 9.2.2.2): carried in
     * msg->requestedTargetCellGlobalID, msg->EarlySyncInformation, msg->LTMConfiguration.
     * Encode when ASN.1 definitions are added by third-party. */
- 
+   xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
    return pdu;
  }
  
@@ -1974,6 +1974,7 @@
                                                              ? F1AP_LowerLayerPresenceStatusChange_suspend_lower_layers
                                                              : F1AP_LowerLayerPresenceStatusChange_resume_lower_layers;
    }
+   xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
    return pdu;
  }
  
