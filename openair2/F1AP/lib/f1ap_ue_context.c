@@ -1563,16 +1563,17 @@
          encode_ltm_configuration_id_mapping_list(req->LTMConfigurationIDMappingList);
    }
  
-   if (req->EarlySyncInformation_Request) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupRequestIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_EarlySyncInformation_Request;
-     ie->criticality = F1AP_Criticality_ignore;
-     ie->value.present = F1AP_UEContextSetupRequestIEs__value_PR_EarlySyncInformation_Request;
-     ie->value.choice.EarlySyncInformation_Request = encode_early_sync_information_request(req->EarlySyncInformation_Request);
-   }
- 
-   return pdu;
- }
+  if (req->EarlySyncInformation_Request) {
+    asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupRequestIEs_t, ie);
+    ie->id = F1AP_ProtocolIE_ID_id_EarlySyncInformation_Request;
+    ie->criticality = F1AP_Criticality_ignore;
+    ie->value.present = F1AP_UEContextSetupRequestIEs__value_PR_EarlySyncInformation_Request;
+    ie->value.choice.EarlySyncInformation_Request = encode_early_sync_information_request(req->EarlySyncInformation_Request);
+  }
+
+  xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
+  return pdu;
+}
  
  /**
   * @brief Decode F1 UE Context Setup Request
@@ -1954,16 +1955,17 @@
      ie->value.choice.EarlySyncInformation = encode_early_sync_information(msg->EarlySyncInformation);
    }
  
-   if (msg->LTMConfiguration) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupResponseIEs_t, ie);
-     ie->id = F1AP_ProtocolIE_ID_id_LTMConfiguration;
-     ie->criticality = F1AP_Criticality_ignore;
-     ie->value.present = F1AP_UEContextSetupResponseIEs__value_PR_LTMConfiguration;
-     ie->value.choice.LTMConfiguration = encode_ltm_configuration(msg->LTMConfiguration);
-   }
- 
-   return pdu;
- }
+  if (msg->LTMConfiguration) {
+    asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextSetupResponseIEs_t, ie);
+    ie->id = F1AP_ProtocolIE_ID_id_LTMConfiguration;
+    ie->criticality = F1AP_Criticality_ignore;
+    ie->value.present = F1AP_UEContextSetupResponseIEs__value_PR_LTMConfiguration;
+    ie->value.choice.LTMConfiguration = encode_ltm_configuration(msg->LTMConfiguration);
+  }
+
+  xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
+  return pdu;
+}
  
  /**
   * @brief Decode F1 UE Context Setup Response
