@@ -2270,6 +2270,43 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
     rrc_gNB_generate_dedicatedRRCReconfiguration(rrc, UE);
   }
 
+  /* Layer C: handle Inter-gNB-DU LTM UE CONTEXT MODIFICATION RESPONSE IEs */
+  if (resp->LTMConfiguration) {
+    const f1ap_LTMConfiguration_t *ltm = resp->LTMConfiguration;
+    LOG_I(NR_RRC,
+          "UE %u: LTMConfiguration in UE Context Modification Response (SSB items=%d, refCfg=%s, completeInd=%s)\n",
+          UE->rrc_ue_id,
+          ltm->sSBInformation_count,
+          ltm->referenceConfigurationInformation ? "present" : "absent",
+          ltm->completeCandidateConfigurationIndicator ? "present" : "absent");
+    if (ltm->referenceConfigurationInformation && ltm->referenceConfigurationInformation->buf
+        && ltm->referenceConfigurationInformation->len > 0) {
+      NR_CellGroupConfig_t *refCfg = NULL;
+      asn_dec_rval_t rv = uper_decode_complete(NULL,
+                                               &asn_DEF_NR_CellGroupConfig,
+                                               (void **)&refCfg,
+                                               ltm->referenceConfigurationInformation->buf,
+                                               ltm->referenceConfigurationInformation->len);
+      if (rv.code == RC_OK && refCfg) {
+        if (UE->masterCellGroup)
+          ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->masterCellGroup);
+        UE->masterCellGroup = refCfg;
+      } else {
+        ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, refCfg);
+      }
+    }
+    for (int i = 0; i < ltm->sSBInformation_count; ++i) {
+      const f1ap_SSBInformation_Item_t *ssb = &ltm->sSBInformation_array[i];
+      LOG_D(NR_RRC,
+            "UE %u LTM SSB[%d]: freq=%ld scs=%ld pci=%ld\n",
+            UE->rrc_ue_id,
+            i,
+            ssb->sSB_frequency,
+            ssb->sSB_subcarrier_spacing,
+            ssb->pCI_NR);
+    }
+  }
+
   // Reconfiguration should have been sent to the UE, so it will attempt the
   // handover. In the F1 case, update with new RNTI, and update secondary UE
   // association, so we can receive the new UE from the target DU (in N2/Xn,

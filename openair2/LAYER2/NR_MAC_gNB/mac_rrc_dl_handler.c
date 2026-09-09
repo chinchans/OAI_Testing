@@ -803,6 +803,57 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
     AssertFatal(*req->transm_action_ind == TransmActionInd_STOP, "Transmission Action Indicator restart not handled yet\n");
     nr_transmission_action_indicator_stop(mac, UE);
   }
+
+  /* Layer C′: Inter-gNB-DU LTM — fill Response LTMConfiguration before encode/send */
+  if (req->LTMInformation_Modify || req->EarlySyncInformation_Request || req->LTMConfigurationIDMappingList
+      || req->LTMCFRAResourceConfigList || req->LTMCellsToBeReleasedList || req->LTMResetInformation) {
+    resp.LTMConfiguration = calloc_or_fail(1, sizeof(*resp.LTMConfiguration));
+    resp.LTMConfiguration->sSBInformation_count = 1;
+    resp.LTMConfiguration->sSBInformation_array =
+        calloc_or_fail(1, sizeof(*resp.LTMConfiguration->sSBInformation_array));
+    f1ap_SSBInformation_Item_t *ssb = &resp.LTMConfiguration->sSBInformation_array[0];
+    const NR_ServingCellConfigCommon_t *scc_ltm = mac->common_channels[0].ServingCellConfigCommon;
+    if (scc_ltm && scc_ltm->downlinkConfigCommon && scc_ltm->downlinkConfigCommon->frequencyInfoDL
+        && scc_ltm->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB) {
+      long freq = *scc_ltm->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
+      if (freq < 0)
+        freq = 0;
+      if (freq > 3279165)
+        freq = 3279165;
+      ssb->sSB_frequency = freq;
+    } else {
+      ssb->sSB_frequency = 0;
+    }
+    ssb->sSB_subcarrier_spacing = 0; /* kHz15 */
+    ssb->sSB_Transmit_power = 0;
+    ssb->sSB_periodicity = 2; /* ms20 */
+    ssb->sSB_half_frame_offset = 0;
+    ssb->sSB_SFN_offset = 0;
+    long pci = 0;
+    if (scc_ltm && scc_ltm->physCellId)
+      pci = *scc_ltm->physCellId;
+    if (pci < 0)
+      pci = 0;
+    if (pci > 1007)
+      pci = 1007;
+    ssb->pCI_NR = pci;
+
+    resp.LTMConfiguration->completeCandidateConfigurationIndicator =
+        calloc_or_fail(1, sizeof(*resp.LTMConfiguration->completeCandidateConfigurationIndicator));
+    *resp.LTMConfiguration->completeCandidateConfigurationIndicator = 0; /* complete */
+
+    if (UE->CellGroup) {
+      uint8_t buf[8192];
+      asn_enc_rval_t er = uper_encode_to_buffer(&asn_DEF_NR_CellGroupConfig, NULL, UE->CellGroup, buf, sizeof(buf));
+      if (er.encoded > 0) {
+        resp.LTMConfiguration->referenceConfigurationInformation =
+            malloc_or_fail(sizeof(*resp.LTMConfiguration->referenceConfigurationInformation));
+        *resp.LTMConfiguration->referenceConfigurationInformation =
+            create_byte_array((size_t)((er.encoded + 7) >> 3), buf);
+      }
+    }
+  }
+
   NR_SCHED_UNLOCK(&mac->sched_lock);
 
   mac->mac_rrc.ue_context_modification_response(&resp);
