@@ -373,30 +373,6 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
   buffer_ba.buf = rrc_reconf;
   signal_rrc_msg(DL_DCCH_NR_RRC_CLASS, message_id, buffer_ba);
 #endif
-
-  /* After HO RRC is queued on the source DU, point F1 UE data at the target.
-   * ReconfigurationComplete for reconfigurationWithSync is sent on the target
-   * cell; if secondary_ue still points at the source, CU drops that UL RRC
-   * ("unexpected DU UE ID"). */
-  nr_ho_target_cu_t *target = ue->ho_context->target;
-  DevAssert(target != NULL && target->du != NULL);
-  if (target->new_rnti != 0) {
-    f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
-    ue_data.secondary_ue = target->du_ue_id;
-    ue_data.du_assoc_id = target->du->assoc_id;
-    bool success = cu_update_f1_ue_data(ue->rrc_ue_id, &ue_data);
-    DevAssert(success);
-    LOG_I(NR_RRC,
-          "UE %d handover: arm target F1 (DU UE ID %u RNTI %04x) after HO RRC on source\n",
-          ue->rrc_ue_id,
-          target->du_ue_id,
-          target->new_rnti);
-    DevAssert(source->old_rnti == ue->rnti);
-    ue->rnti = target->new_rnti;
-    ue->nr_cellid = target->du->setup_req->cell[0].info.nr_cellid;
-  } else {
-    LOG_E(NR_RRC, "UE %d: cannot arm target F1 after HO RRC (new_rnti still 0)\n", ue->rrc_ue_id);
-  }
 }
 
 static void nr_rrc_f1_ho_acknowledge(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
