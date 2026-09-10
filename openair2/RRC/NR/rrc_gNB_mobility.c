@@ -37,109 +37,10 @@
 #include "openair3/SECU/key_nas_deriver.h"
 #include "openair2/RRC/NR/rrc_gNB_NGAP.h"
 #include "NR_DL-DCCH-MessageType.h"
-#include "NR_CellGroupConfig.h"
-#include "uper_encoder.h"
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"
 #endif
-
-static byte_array_t *nr_rrc_encode_asn1_uper_to_ba(const asn_TYPE_descriptor_t *td, const void *sptr)
-{
-  if (!td || !sptr)
-    return NULL;
-  uint8_t buf[8192];
-  asn_enc_rval_t er = uper_encode_to_buffer(td, NULL, sptr, buf, sizeof(buf));
-  if (er.encoded < 0)
-    return NULL;
-  byte_array_t *ba = malloc_or_fail(sizeof(*ba));
-  *ba = create_byte_array((size_t)((er.encoded + 7) >> 3), buf);
-  return ba;
-}
-
-/* Layer A: fill Inter-gNB-DU LTM UE CONTEXT MODIFICATION REQUEST IEs for source DU */
-static void fill_ltm_ue_context_mod_req_ies(f1ap_ue_context_mod_req_t *req,
-                                            const gNB_RRC_UE_t *ue,
-                                            const nr_rrc_du_container_t *source_du,
-                                            const nr_rrc_du_container_t *target_du)
-{
-  DevAssert(req != NULL && ue != NULL && source_du != NULL && target_du != NULL);
-  const f1ap_served_cell_info_t *src_cell = &source_du->setup_req->cell[0].info;
-  const f1ap_served_cell_info_t *tgt_cell = &target_du->setup_req->cell[0].info;
-
-  req->LTMInformation_Modify = calloc_or_fail(1, sizeof(*req->LTMInformation_Modify));
-  req->LTMInformation_Modify->LTMIndicator = 0; /* F1AP_LTMIndicator_true */
-  if (ue->masterCellGroup) {
-    req->LTMInformation_Modify->ReferenceConfiguration =
-        nr_rrc_encode_asn1_uper_to_ba(&asn_DEF_NR_CellGroupConfig, ue->masterCellGroup);
-  }
-
-  req->LTMConfigurationIDMappingList = calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList));
-  req->LTMConfigurationIDMappingList->list_count = 1;
-  req->LTMConfigurationIDMappingList->list_array =
-      calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList->list_array));
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_plmn = tgt_cell->plmn;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_nr_cellid = tgt_cell->nr_cellid;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMConfigurationID = 1;
-
-  req->EarlySyncInformation_Request = calloc_or_fail(1, sizeof(*req->EarlySyncInformation_Request));
-  req->EarlySyncInformation_Request->RequestforRACHConfiguration = 0; /* true */
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_count = 1;
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array =
-      calloc_or_fail(1, sizeof(*req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array));
-  uint64_t du_id = target_du->setup_req->gNB_DU_id;
-  if (du_id > 68719476735ULL)
-    du_id = 68719476735ULL;
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = du_id;
-
-  req->LTMCellsToBeReleasedList = calloc_or_fail(1, sizeof(*req->LTMCellsToBeReleasedList));
-  req->LTMCellsToBeReleasedList->list_count = 1;
-  req->LTMCellsToBeReleasedList->list_array = calloc_or_fail(1, sizeof(*req->LTMCellsToBeReleasedList->list_array));
-  req->LTMCellsToBeReleasedList->list_array[0].plmn = src_cell->plmn;
-  req->LTMCellsToBeReleasedList->list_array[0].nr_cellid = src_cell->nr_cellid;
-
-  req->LTMCFRAResourceConfigList = calloc_or_fail(1, sizeof(*req->LTMCFRAResourceConfigList));
-  req->LTMCFRAResourceConfigList->list_count = 1;
-  req->LTMCFRAResourceConfigList->list_array = calloc_or_fail(1, sizeof(*req->LTMCFRAResourceConfigList->list_array));
-  req->LTMCFRAResourceConfigList->list_array[0].cellID_plmn = tgt_cell->plmn;
-  req->LTMCFRAResourceConfigList->list_array[0].cellID_nr_cellid = tgt_cell->nr_cellid;
-
-  if (ue->masterCellGroup) {
-    req->LTMResetInformation = calloc_or_fail(1, sizeof(*req->LTMResetInformation));
-    req->LTMResetInformation->servingCellL2ResetConfiguration =
-        nr_rrc_encode_asn1_uper_to_ba(&asn_DEF_NR_CellGroupConfig, ue->masterCellGroup);
-  }
-
-  /* Procedure-side carrier only (no Mod Request ProtocolIE in R18.6.0) */
-  req->LTMTCIStatesConfigurationsList = calloc_or_fail(1, sizeof(*req->LTMTCIStatesConfigurationsList));
-  req->LTMTCIStatesConfigurationsList->list_count = 1;
-  req->LTMTCIStatesConfigurationsList->list_array =
-      calloc_or_fail(1, sizeof(*req->LTMTCIStatesConfigurationsList->list_array));
-  req->LTMTCIStatesConfigurationsList->list_array[0].tCIStateID = 0;
-  if (ue->masterCellGroup) {
-    byte_array_t *tci = nr_rrc_encode_asn1_uper_to_ba(&asn_DEF_NR_CellGroupConfig, ue->masterCellGroup);
-    if (tci) {
-      req->LTMTCIStatesConfigurationsList->list_array[0].tCIState = *tci;
-      free(tci);
-    }
-  }
-}
-
-static void rrc_gNB_send_ltm_ue_context_modification_to_source(gNB_RRC_INST *rrc,
-                                                              gNB_RRC_UE_t *ue,
-                                                              const nr_rrc_du_container_t *source_du,
-                                                              const nr_rrc_du_container_t *target_du)
-{
-  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
-  RETURN_IF_INVALID_ASSOC_ID(source_du->assoc_id);
-  f1ap_ue_context_mod_req_t req = {
-      .gNB_CU_ue_id = ue->rrc_ue_id,
-      .gNB_DU_ue_id = ue_data.secondary_ue,
-  };
-  fill_ltm_ue_context_mod_req_ies(&req, ue, source_du, target_du);
-  rrc->mac_rrc.ue_context_modification_request(source_du->assoc_id, &req);
-  free_ue_context_mod_req(&req);
-}
 
 typedef enum { HO_CTX_BOTH, HO_CTX_SOURCE, HO_CTX_TARGET } ho_ctx_type_t;
 static nr_handover_context_t *alloc_ho_ctx(ho_ctx_type_t type)
@@ -271,10 +172,6 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
         target_du->setup_req->gNB_DU_id,
         target_du->assoc_id,
         target_du->setup_req->cell[0].info.nr_pci);
-
-  /* Inter-gNB-DU LTM: UE CONTEXT MODIFICATION REQUEST to source DU (Layer A fill + send) */
-  if (source_du != NULL)
-    rrc_gNB_send_ltm_ue_context_modification_to_source((gNB_RRC_INST *)rrc, ue, source_du, target_du);
 
   f1ap_drb_to_setup_t *drbs = calloc_or_fail(MAX_DRBS_PER_UE, sizeof(*drbs));
   int nb_drb = fill_drb_to_be_setup(rrc, ue, drbs);

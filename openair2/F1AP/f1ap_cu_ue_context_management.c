@@ -64,7 +64,7 @@ int CU_send_UE_CONTEXT_SETUP_REQUEST(sctp_assoc_t assoc_id, const f1ap_ue_contex
   signal_ue_id(&ue_context_p->ue_context, F1_NETWORK_INTERFACE_TYPE, 0);
 #endif
 
-  return 0;
+  return RCA_BUILD_FIX_LOOP_TEST;
 }
 
 int CU_handle_UE_CONTEXT_SETUP_RESPONSE(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
@@ -159,12 +159,6 @@ int CU_handle_UE_CONTEXT_MODIFICATION_RESPONSE(instance_t instance, sctp_assoc_t
     LOG_E(F1AP, "cannot decode F1 UE Context Modification Response\n");
     free_ue_context_mod_resp(&resp);
     return -1;
-  }
-  if (resp.LTMConfiguration) {
-    LOG_I(F1AP,
-          "UE Context Modification Response: LTMConfiguration present (SSB=%d) for CU UE ID %u\n",
-          resp.LTMConfiguration->sSBInformation_count,
-          resp.gNB_CU_ue_id);
   }
   MessageDef *msg_p = itti_alloc_new_message(TASK_DU_F1, 0, F1AP_UE_CONTEXT_MODIFICATION_RESP);
   msg_p->ittiMsgHeader.originInstance = assoc_id;

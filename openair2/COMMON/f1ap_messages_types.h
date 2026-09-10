@@ -521,55 +521,17 @@
    f1ap_LTMConfigurationIDMapping_Item_t *list_array;
  } f1ap_LTMConfigurationIDMappingList_t;
  
- /* EarlySyncInformation-Request: RequestforRACHConfiguration ENUMERATED {true}, LTMgNB-DU-IDsList */
- #define F1AP_MAX_NO_LTM_GNB_DU_IDS 8
+ /* EarlySyncInformation-Request: RequestforRACHConfiguration, LTMgNB-DU-IDsList */
+ #define F1AP_MAX_NO_LTM_GNB_DU_IDS 16
  typedef struct f1ap_LTMgNB_DU_IDs_Item_s {
    uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
  } f1ap_LTMgNB_DU_IDs_Item_t;
  
  typedef struct f1ap_EarlySyncInformation_Request_s {
-   int RequestforRACHConfiguration; /* ENUMERATED { true, ... } — F1AP_RequestforRACHConfiguration_true */
+   byte_array_t *RequestforRACHConfiguration; /* OCTET STRING */
    int LTMgNB_DU_IDsList_count;
    f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
  } f1ap_EarlySyncInformation_Request_t;
- 
- /* LTMInformation-Modify (UE CONTEXT MODIFICATION REQUEST, TS 38.473) */
- typedef struct f1ap_LTMInformation_Modify_s {
-   int LTMIndicator; /* LTMIndicator ::= ENUMERATED { true, ... } */
-   byte_array_t *ReferenceConfiguration; /* ReferenceConfigurationInformation OCTET STRING (CHOICE) */
-   byte_array_t *cSIResourceConfigToAddModList; /* CSIResourceConfiguration optional */
-   byte_array_t *cSIResourceConfigToReleaseList;
- } f1ap_LTMInformation_Modify_t;
- 
- /* LTMCells-ToBeReleased-List */
- typedef struct f1ap_LTMCellsToBeReleased_Item_s {
-   plmn_id_t plmn;
-   uint64_t nr_cellid;
- } f1ap_LTMCellsToBeReleased_Item_t;
- 
- typedef struct f1ap_LTMCellsToBeReleasedList_s {
-   int list_count;
-   f1ap_LTMCellsToBeReleased_Item_t *list_array;
- } f1ap_LTMCellsToBeReleasedList_t;
- 
- /* LTMCFRAResourceConfig-List Item: CellID (NRCGI) + optional CFRA OCTET STRINGs */
- typedef struct f1ap_LTMCFRAResourceConfig_Item_s {
-   plmn_id_t cellID_plmn;
-   uint64_t cellID_nr_cellid;
-   byte_array_t *lTMCFRAResourceConfig; /* optional OCTET STRING (RRC) */
-   byte_array_t *lTMCFRAResourceConfigSUL;
- } f1ap_LTMCFRAResourceConfig_Item_t;
- 
- typedef struct f1ap_LTMCFRAResourceConfigList_s {
-   int list_count;
-   f1ap_LTMCFRAResourceConfig_Item_t *list_array;
- } f1ap_LTMCFRAResourceConfigList_t;
- 
- /* LTMResetInformation */
- typedef struct f1ap_LTMResetInformation_s {
-   byte_array_t *servingCellL2ResetConfiguration; /* optional OCTET STRING */
- } f1ap_LTMResetInformation_t;
- 
  
  typedef struct f1ap_ue_context_setup_req_s {
    uint32_t gNB_CU_ue_id;
@@ -611,13 +573,6 @@
    byte_array_t tCIState;
  } f1ap_TCIStatesConfigurationsItem_t;
  
- /* LTMTCIStatesConfigurationsList — procedure-side carrier; Response EarlySyncInformation
-  * carries TCIStatesConfigurationsList as OCTET STRING (TS 38.473). */
- typedef struct f1ap_LTMTCIStatesConfigurationsList_s {
-   int list_count;
-   f1ap_TCIStatesConfigurationsItem_t *list_array;
- } f1ap_LTMTCIStatesConfigurationsList_t;
- 
  /* EarlySyncInformation: tCIStatesConfigurationsList, earlyULSyncConfig optional, earlyULSyncConfigSUL optional */
  typedef struct f1ap_EarlySyncInformation_s {
    int tCIStatesConfigurationsList_count;
@@ -626,21 +581,9 @@
    byte_array_t *earlyULSyncConfigSUL;
  } f1ap_EarlySyncInformation_t;
  
- /* SSBInformation item (mandatory inside LTMConfiguration) */
- typedef struct f1ap_SSBInformation_Item_s {
-   long sSB_frequency;
-   long sSB_subcarrier_spacing; /* 0=kHz15 .. */
-   long sSB_Transmit_power;
-   long sSB_periodicity; /* 0=ms5 .. */
-   long sSB_half_frame_offset;
-   long sSB_SFN_offset;
-   long pCI_NR; /* NRPCI 0..1007 */
- } f1ap_SSBInformation_Item_t;
- 
  /* LTMConfiguration: sSBInformation, referenceConfigurationInformation optional, etc. */
  typedef struct f1ap_LTMConfiguration_s {
-   int sSBInformation_count;
-   f1ap_SSBInformation_Item_t *sSBInformation_array;
+   byte_array_t sSBInformation;                              /* SSBInformation ::= OCTET STRING */
    byte_array_t *referenceConfigurationInformation;          /* optional */
    int *completeCandidateConfigurationIndicator;             /* ENUMERATED { complete, ... } optional */
    byte_array_t *lTMCFRAResourceConfig;                      /* optional */
@@ -693,15 +636,6 @@
    f1ap_drb_to_release_t *drbs_rel;
  
    lower_layer_status_t *status;
- 
-   /* Optional IEs for Inter-gNB-DU LTM Handover (TS 38.473 9.2.2.7 UE Context Modification Request) */
-   f1ap_LTMInformation_Modify_t *LTMInformation_Modify;                 /* id-LTMInformation-Modify */
-   f1ap_LTMConfigurationIDMappingList_t *LTMConfigurationIDMappingList; /* id-LTMConfigurationIDMappingList */
-   f1ap_EarlySyncInformation_Request_t *EarlySyncInformation_Request;   /* id-EarlySyncInformation-Request */
-   f1ap_LTMCellsToBeReleasedList_t *LTMCellsToBeReleasedList;           /* id-LTMCells-ToBeReleased-List */
-   f1ap_LTMCFRAResourceConfigList_t *LTMCFRAResourceConfigList;         /* id-LTMCFRAResourceConfig-List */
-   f1ap_LTMResetInformation_t *LTMResetInformation;                     /* id-LTMResetInformation */
-   f1ap_LTMTCIStatesConfigurationsList_t *LTMTCIStatesConfigurationsList; /* procedure-side; see type comment */
  } f1ap_ue_context_mod_req_t;
  
  typedef struct f1ap_ue_context_mod_resp {
@@ -715,9 +649,6 @@
  
    int srbs_len;
    f1ap_srb_setup_t *srbs;
- 
-   /* Optional IEs for Inter-gNB-DU LTM Handover (TS 38.473 9.2.2.8 UE Context Modification Response) */
-   f1ap_LTMConfiguration_t *LTMConfiguration; /* id-LTMConfiguration */
  } f1ap_ue_context_mod_resp_t;
  
  typedef enum F1ap_Cause_e {
