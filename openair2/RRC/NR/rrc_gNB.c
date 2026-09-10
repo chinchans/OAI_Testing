@@ -1774,8 +1774,30 @@ static void handle_rrcReconfigurationComplete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *U
   }
 
   if (UE->ho_context != NULL) {
-    LOG_A(NR_RRC, "handover for UE %d/RNTI %04x complete!\n", UE->rrc_ue_id, UE->rnti);
+    /* UE finished HO RRCReconfiguration on the source DU. Only now switch F1
+     * assoc/RNTI to the target — switching earlier drops UL ReconfigurationComplete. */
     DevAssert(UE->ho_context->target != NULL);
+    if (UE->ho_context->source != NULL) {
+      nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
+      if (target_ctx->new_rnti != 0) {
+        f1_ue_data_t ho_ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+        ho_ue_data.secondary_ue = target_ctx->du_ue_id;
+        ho_ue_data.du_assoc_id = target_ctx->du->assoc_id;
+        bool ho_switched = cu_update_f1_ue_data(UE->rrc_ue_id, &ho_ue_data);
+        DevAssert(ho_switched);
+        LOG_I(NR_RRC,
+              "UE %d handover: update RNTI from %04x to %04x (after ReconfigurationComplete)\n",
+              UE->rrc_ue_id,
+              UE->rnti,
+              target_ctx->new_rnti);
+        nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
+        DevAssert(source_ctx->old_rnti == UE->rnti);
+        UE->rnti = target_ctx->new_rnti;
+        UE->nr_cellid = target_ctx->du->setup_req->cell[0].info.nr_cellid;
+      }
+    }
+
+    LOG_A(NR_RRC, "handover for UE %d/RNTI %04x complete!\n", UE->rrc_ue_id, UE->rnti);
 
     UE->ho_context->target->ho_success(rrc, UE);
     nr_rrc_finalize_ho(UE);
@@ -2312,33 +2334,18 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
     }
   }
 
-  // Reconfiguration should have been sent to the UE, so it will attempt the
-  // handover. In the F1 case, update with new RNTI, and update secondary UE
-  // association, so we can receive the new UE from the target DU (in N2/Xn,
-  // nothing is to be done, we wait for confirmation to release the UE in the
-  // CU/DU).
-  // LTM prep Mod Response from source arrives before target Setup fills
-  // new_rnti and before HO RRC was delivered on source — do not switch yet.
+  // During F1/LTM HO, never switch F1 assoc/RNTI on Mod Response: LTM prep and
+  // the Mod Response that carries/acks HO RRC both arrive while the UE still
+  // needs the source DU for ReconfigurationComplete. Switch happens in
+  // handle_rrcReconfigurationComplete after HO RRC completes.
   if (UE->ho_context && UE->ho_context->target && UE->ho_context->source) {
     nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
-    if (resp->LTMConfiguration || target_ctx->new_rnti == 0) {
-      LOG_I(NR_RRC,
-            "UE %d: defer HO F1 assoc/RNTI switch (ltm_prep=%d new_rnti=%04x)\n",
-            UE->rrc_ue_id,
-            resp->LTMConfiguration != NULL,
-            target_ctx->new_rnti);
-    } else {
-      f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
-      ue_data.secondary_ue = target_ctx->du_ue_id;
-      ue_data.du_assoc_id = target_ctx->du->assoc_id;
-      bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
-      DevAssert(success);
-      LOG_I(NR_RRC, "UE %d handover: update RNTI from %04x to %04x\n", UE->rrc_ue_id, UE->rnti, target_ctx->new_rnti);
-      nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
-      DevAssert(source_ctx->old_rnti == UE->rnti);
-      UE->rnti = target_ctx->new_rnti;
-      UE->nr_cellid = target_ctx->du->setup_req->cell[0].info.nr_cellid;
-    }
+    LOG_I(NR_RRC,
+          "UE %d: defer HO F1 assoc/RNTI switch until ReconfigurationComplete "
+          "(ltm_prep=%d new_rnti=%04x)\n",
+          UE->rrc_ue_id,
+          resp->LTMConfiguration != NULL,
+          target_ctx->new_rnti);
   }
 }
 
