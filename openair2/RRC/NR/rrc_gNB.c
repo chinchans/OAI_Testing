@@ -2279,8 +2279,11 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
           ltm->sSBInformation_count,
           ltm->referenceConfigurationInformation ? "present" : "absent",
           ltm->completeCandidateConfigurationIndicator ? "present" : "absent");
+    /* Do not overwrite masterCellGroup with LTM referenceConfiguration during HO:
+     * target Setup Response may already have installed reconfigurationWithSync /
+     * CFRA needed to build the HO RRCReconfiguration. */
     if (ltm->referenceConfigurationInformation && ltm->referenceConfigurationInformation->buf
-        && ltm->referenceConfigurationInformation->len > 0) {
+        && ltm->referenceConfigurationInformation->len > 0 && UE->ho_context == NULL) {
       NR_CellGroupConfig_t *refCfg = NULL;
       asn_dec_rval_t rv = uper_decode_complete(NULL,
                                                &asn_DEF_NR_CellGroupConfig,
@@ -2294,6 +2297,8 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
       } else {
         ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, refCfg);
       }
+    } else if (ltm->referenceConfigurationInformation && UE->ho_context) {
+      LOG_I(NR_RRC, "UE %u: keep masterCellGroup; ignore LTM referenceConfiguration during HO\n", UE->rrc_ue_id);
     }
     for (int i = 0; i < ltm->sSBInformation_count; ++i) {
       const f1ap_SSBInformation_Item_t *ssb = &ltm->sSBInformation_array[i];
@@ -2311,19 +2316,29 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
   // handover. In the F1 case, update with new RNTI, and update secondary UE
   // association, so we can receive the new UE from the target DU (in N2/Xn,
   // nothing is to be done, we wait for confirmation to release the UE in the
-  // CU/DU)
+  // CU/DU).
+  // LTM prep Mod Response from source arrives before target Setup fills
+  // new_rnti and before HO RRC was delivered on source — do not switch yet.
   if (UE->ho_context && UE->ho_context->target && UE->ho_context->source) {
     nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
-    f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
-    ue_data.secondary_ue = target_ctx->du_ue_id;
-    ue_data.du_assoc_id = target_ctx->du->assoc_id;
-    bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
-    DevAssert(success);
-    LOG_I(NR_RRC, "UE %d handover: update RNTI from %04x to %04x\n", UE->rrc_ue_id, UE->rnti, target_ctx->new_rnti);
-    nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
-    DevAssert(source_ctx->old_rnti == UE->rnti);
-    UE->rnti = target_ctx->new_rnti;
-    UE->nr_cellid = target_ctx->du->setup_req->cell[0].info.nr_cellid;
+    if (resp->LTMConfiguration || target_ctx->new_rnti == 0) {
+      LOG_I(NR_RRC,
+            "UE %d: defer HO F1 assoc/RNTI switch (ltm_prep=%d new_rnti=%04x)\n",
+            UE->rrc_ue_id,
+            resp->LTMConfiguration != NULL,
+            target_ctx->new_rnti);
+    } else {
+      f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+      ue_data.secondary_ue = target_ctx->du_ue_id;
+      ue_data.du_assoc_id = target_ctx->du->assoc_id;
+      bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
+      DevAssert(success);
+      LOG_I(NR_RRC, "UE %d handover: update RNTI from %04x to %04x\n", UE->rrc_ue_id, UE->rnti, target_ctx->new_rnti);
+      nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
+      DevAssert(source_ctx->old_rnti == UE->rnti);
+      UE->rnti = target_ctx->new_rnti;
+      UE->nr_cellid = target_ctx->du->setup_req->cell[0].info.nr_cellid;
+    }
   }
 }
 

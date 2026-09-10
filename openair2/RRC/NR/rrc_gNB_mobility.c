@@ -341,18 +341,24 @@ static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id,
 }
 static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, uint8_t *rrc_reconf, int rrc_reconf_len)
 {
-  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
+  /* Always deliver HO RRCReconfiguration on the source DU. Live F1 UE data may
+   * already point at the target after an early Mod Response (LTM prep). */
+  DevAssert(ue->ho_context != NULL && ue->ho_context->source != NULL);
+  nr_ho_source_cu_t *source = ue->ho_context->source;
+  DevAssert(source->du != NULL);
+  sctp_assoc_t assoc_id = source->du->assoc_id;
+  uint32_t du_ue_id = source->du_ue_id;
 
   TransmActionInd_t transmission_action_indicator = TransmActionInd_STOP;
-  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
+  RETURN_IF_INVALID_ASSOC_ID(assoc_id);
   f1ap_ue_context_mod_req_t ue_context_modif_req = {
       .gNB_CU_ue_id = ue->rrc_ue_id,
-      .gNB_DU_ue_id = ue_data.secondary_ue,
+      .gNB_DU_ue_id = du_ue_id,
       .transm_action_ind = &transmission_action_indicator,
   };
   deliver_ue_ctxt_modification_data_t data = {.rrc = rrc,
                                               .modification_req = &ue_context_modif_req,
-                                              .assoc_id = ue_data.du_assoc_id};
+                                              .assoc_id = assoc_id};
   int srb_id = 1;
   nr_pdcp_data_req_srb(ue->rrc_ue_id,
                        srb_id,
