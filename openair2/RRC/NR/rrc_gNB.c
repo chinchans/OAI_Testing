@@ -2270,6 +2270,22 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
     rrc_gNB_generate_dedicatedRRCReconfiguration(rrc, UE);
   }
 
+  if (resp->LTMConfiguration) {
+    const f1ap_LTMConfiguration_t *ltm = resp->LTMConfiguration;
+    if (ltm->completeCandidateConfigurationIndicator)
+      LOG_I(NR_RRC, "UE %u LTM UE Context Modification Response: complete candidate configuration indicated\n", UE->rrc_ue_id);
+    if (ltm->referenceConfigurationInformation)
+      LOG_I(NR_RRC,
+            "UE %u LTM UE Context Modification Response: reference configuration information len %zu\n",
+            UE->rrc_ue_id,
+            ltm->referenceConfigurationInformation->len);
+    if (ltm->sSBInformation.list_count > 0)
+      LOG_I(NR_RRC,
+            "UE %u LTM UE Context Modification Response: SSB information items %d\n",
+            UE->rrc_ue_id,
+            ltm->sSBInformation.list_count);
+  }
+
   // Reconfiguration should have been sent to the UE, so it will attempt the
   // handover. In the F1 case, update with new RNTI, and update secondary UE
   // association, so we can receive the new UE from the target DU (in N2/Xn,
