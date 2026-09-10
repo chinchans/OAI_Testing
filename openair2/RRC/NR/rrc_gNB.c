@@ -1774,30 +1774,9 @@ static void handle_rrcReconfigurationComplete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *U
   }
 
   if (UE->ho_context != NULL) {
-    /* UE finished HO RRCReconfiguration on the source DU. Only now switch F1
-     * assoc/RNTI to the target — switching earlier drops UL ReconfigurationComplete. */
-    DevAssert(UE->ho_context->target != NULL);
-    if (UE->ho_context->source != NULL) {
-      nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
-      if (target_ctx->new_rnti != 0) {
-        f1_ue_data_t ho_ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
-        ho_ue_data.secondary_ue = target_ctx->du_ue_id;
-        ho_ue_data.du_assoc_id = target_ctx->du->assoc_id;
-        bool ho_switched = cu_update_f1_ue_data(UE->rrc_ue_id, &ho_ue_data);
-        DevAssert(ho_switched);
-        LOG_I(NR_RRC,
-              "UE %d handover: update RNTI from %04x to %04x (after ReconfigurationComplete)\n",
-              UE->rrc_ue_id,
-              UE->rnti,
-              target_ctx->new_rnti);
-        nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
-        DevAssert(source_ctx->old_rnti == UE->rnti);
-        UE->rnti = target_ctx->new_rnti;
-        UE->nr_cellid = target_ctx->du->setup_req->cell[0].info.nr_cellid;
-      }
-    }
-
+    /* F1 assoc/RNTI already armed to target after HO RRC was sent on source. */
     LOG_A(NR_RRC, "handover for UE %d/RNTI %04x complete!\n", UE->rrc_ue_id, UE->rnti);
+    DevAssert(UE->ho_context->target != NULL);
 
     UE->ho_context->target->ho_success(rrc, UE);
     nr_rrc_finalize_ho(UE);
@@ -2191,9 +2170,13 @@ static void rrc_CU_process_ue_context_release_request(MessageDef *msg_p, sctp_as
     nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
     bool from_source_du = source_ctx && source_ctx->du->assoc_id == assoc_id;
     if (from_source_du) {
-      // we received release request from the source DU, but HO is still
-      // ongoing; free the UE, and remove the HO context.
-      LOG_W(NR_RRC, "UE %d: release request from source DU ID %ld during HO, marking HO as complete\n", UE->rrc_ue_id, source_ctx->du->setup_req->gNB_DU_id);
+      // Source DU releases while HO is ongoing (UE already left). Emit the
+      // same complete marker the execute gate waits on, then clean HO context.
+      LOG_W(NR_RRC,
+            "UE %d: release request from source DU ID %ld during HO, marking HO as complete\n",
+            UE->rrc_ue_id,
+            source_ctx->du->setup_req->gNB_DU_id);
+      LOG_A(NR_RRC, "handover for UE %d/RNTI %04x complete!\n", UE->rrc_ue_id, UE->rnti);
       RETURN_IF_INVALID_ASSOC_ID(source_ctx->du->assoc_id);
       f1ap_ue_context_rel_cmd_t cmd = {
           .gNB_CU_ue_id = UE->rrc_ue_id,
@@ -2334,15 +2317,14 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
     }
   }
 
-  // During F1/LTM HO, never switch F1 assoc/RNTI on Mod Response: LTM prep and
-  // the Mod Response that carries/acks HO RRC both arrive while the UE still
-  // needs the source DU for ReconfigurationComplete. Switch happens in
-  // handle_rrcReconfigurationComplete after HO RRC completes.
+  // During F1/LTM HO do not switch F1 on Mod Response. LTM prep can arrive
+  // before target Setup fills new_rnti; HO RRC must go on source first.
+  // Target F1 is armed in rrc_gNB_trigger_reconfiguration_for_handover.
   if (UE->ho_context && UE->ho_context->target && UE->ho_context->source) {
     nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
     LOG_I(NR_RRC,
-          "UE %d: defer HO F1 assoc/RNTI switch until ReconfigurationComplete "
-          "(ltm_prep=%d new_rnti=%04x)\n",
+          "UE %d: keep source F1 on Mod Response (ltm_prep=%d new_rnti=%04x); "
+          "target armed after HO RRC send\n",
           UE->rrc_ue_id,
           resp->LTMConfiguration != NULL,
           target_ctx->new_rnti);
