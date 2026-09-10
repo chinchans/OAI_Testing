@@ -2952,7 +2952,8 @@
      ie_ltm->value.present = F1AP_UEContextModificationResponseIEs__value_PR_LTMConfiguration;
      ie_ltm->value.choice.LTMConfiguration = encode_LTMConfiguration(msg->LTMConfiguration);
    }
- 
+   xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
+
    return pdu;
  }
  
