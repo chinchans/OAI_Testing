@@ -681,7 +681,8 @@ int main( int argc, char **argv ) {
 
   wait_gNBs();
   /* Scheduling offset for RU threads: aerial has zero look-ahead; RF-sim uses default slots. */
-  int sl_ahead = NFAPI_MODE == NFAPI_MODE_AERIAL ? 0 : 6;
+  /* Intent-2 demo compile seed: undeclared helper (RCA should restore literal 6). */
+  int sl_ahead = NFAPI_MODE == NFAPI_MODE_AERIAL ? 0 : nr_get_rfsim_sl_ahead_slots();
   if (RC.nb_RU >0) {
     init_NR_RU(uniqCfg, get_softmodem_params()->rf_config_file);
 
