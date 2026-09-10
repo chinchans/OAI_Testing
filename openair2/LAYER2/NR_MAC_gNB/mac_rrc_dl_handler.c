@@ -803,6 +803,40 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
     AssertFatal(*req->transm_action_ind == TransmActionInd_STOP, "Transmission Action Indicator restart not handled yet\n");
     nr_transmission_action_indicator_stop(mac, UE);
   }
+
+  if (req->LTMInformation_Modify) {
+    f1ap_LTMConfiguration_t *ltm_cfg = calloc_or_fail(1, sizeof(*ltm_cfg));
+    ltm_cfg->sSBInformation.list_count = 1;
+    ltm_cfg->sSBInformation.list_array = calloc_or_fail(1, sizeof(*ltm_cfg->sSBInformation.list_array));
+    f1ap_ssb_information_item_t *ssb = &ltm_cfg->sSBInformation.list_array[0];
+    ssb->pci_nr = (uint16_t)scc->physCellId;
+    ssb->ssb_frequency = scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
+    ssb->ssb_subcarrier_spacing = scc->ssbSubcarrierSpacing;
+    ssb->ssb_transmit_power = 0;
+    ssb->ssb_periodicity = 2;
+    ssb->ssb_half_frame_offset = 0;
+    ssb->ssb_sfn_offset = 0;
+    if (req->LTMInformation_Modify->ReferenceConfiguration
+        && req->LTMInformation_Modify->ReferenceConfiguration->choice == F1AP_REF_CONFIG_REQUEST_LOWER_LAYER) {
+      byte_array_t cgc = {0};
+      if (resp.du_to_cu_rrc_info)
+        cgc = resp.du_to_cu_rrc_info->cell_group_config;
+      else if (UE->CellGroup) {
+        cgc.buf = calloc_or_fail(1, 1024);
+        asn_enc_rval_t enc_rval = uper_encode_to_buffer(&asn_DEF_NR_CellGroupConfig, NULL, UE->CellGroup, cgc.buf, 1024);
+        AssertFatal(enc_rval.encoded > 0, "Could not encode CellGroup for LTM reference configuration\n");
+        cgc.len = (enc_rval.encoded + 7) >> 3;
+      }
+      if (cgc.len > 0) {
+        ltm_cfg->referenceConfigurationInformation = malloc_or_fail(sizeof(*ltm_cfg->referenceConfigurationInformation));
+        *ltm_cfg->referenceConfigurationInformation = copy_byte_array(cgc);
+      }
+      if (!resp.du_to_cu_rrc_info && cgc.buf)
+        free(cgc.buf);
+    }
+    resp.LTMConfiguration = ltm_cfg;
+  }
+
   NR_SCHED_UNLOCK(&mac->sched_lock);
 
   mac->mac_rrc.ue_context_modification_response(&resp);

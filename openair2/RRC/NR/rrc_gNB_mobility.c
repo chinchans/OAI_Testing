@@ -236,6 +236,44 @@ static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id,
   data->modification_req->rrc_container = &ba;
   data->rrc->mac_rrc.ue_context_modification_request(data->assoc_id, data->modification_req);
 }
+void nr_rrc_fill_ue_context_mod_req_ltm_handover(f1ap_ue_context_mod_req_t *req, gNB_RRC_UE_t *ue)
+{
+  DevAssert(req != NULL);
+  DevAssert(ue != NULL);
+  DevAssert(ue->ho_context != NULL);
+  DevAssert(ue->ho_context->target != NULL);
+  DevAssert(ue->ho_context->target->du != NULL);
+
+  const f1ap_served_cell_info_t *target_cell = &ue->ho_context->target->du->setup_req->cell[0].info;
+
+  req->plmn = malloc_or_fail(sizeof(*req->plmn));
+  *req->plmn = target_cell->plmn;
+  req->nr_cellid = malloc_or_fail(sizeof(*req->nr_cellid));
+  *req->nr_cellid = target_cell->nr_cellid;
+
+  f1ap_LTMInformation_Modify_t *ltm_mod = calloc_or_fail(1, sizeof(*ltm_mod));
+  ltm_mod->LTMIndicator = 0;
+  f1ap_reference_configuration_t *ref_cfg = calloc_or_fail(1, sizeof(*ref_cfg));
+  ref_cfg->choice = F1AP_REF_CONFIG_REQUEST_LOWER_LAYER;
+  ltm_mod->ReferenceConfiguration = ref_cfg;
+  req->LTMInformation_Modify = ltm_mod;
+
+  f1ap_LTMConfigurationIDMappingList_t *mapping = calloc_or_fail(1, sizeof(*mapping));
+  mapping->list_count = 1;
+  mapping->list_array = calloc_or_fail(1, sizeof(*mapping->list_array));
+  mapping->list_array[0].lTMCellID_plmn = target_cell->plmn;
+  mapping->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
+  mapping->list_array[0].lTMConfigurationID = 1;
+  req->LTMConfigurationIDMappingList = mapping;
+
+  f1ap_EarlySyncInformation_Request_t *early_sync = calloc_or_fail(1, sizeof(*early_sync));
+  early_sync->RequestforRACHConfiguration = 0;
+  early_sync->LTMgNB_DU_IDsList_count = 1;
+  early_sync->LTMgNB_DU_IDsList_array = calloc_or_fail(1, sizeof(*early_sync->LTMgNB_DU_IDsList_array));
+  early_sync->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = ue->ho_context->target->du->setup_req->gNB_DU_id;
+  req->EarlySyncInformation_Request = early_sync;
+}
+
 static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, uint8_t *rrc_reconf, int rrc_reconf_len)
 {
   f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
@@ -247,6 +285,8 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
       .gNB_DU_ue_id = ue_data.secondary_ue,
       .transm_action_ind = &transmission_action_indicator,
   };
+  if (ue->ho_context && ue->ho_context->ltm_handover)
+    nr_rrc_fill_ue_context_mod_req_ltm_handover(&ue_context_modif_req, ue);
   deliver_ue_ctxt_modification_data_t data = {.rrc = rrc,
                                               .modification_req = &ue_context_modif_req,
                                               .assoc_id = ue_data.du_assoc_id};
@@ -258,6 +298,7 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
                        (unsigned char *const)rrc_reconf,
                        rrc_deliver_ue_ctxt_modif_req,
                        &data);
+  free_ue_context_mod_req(&ue_context_modif_req);
 #ifdef E2_AGENT
   uint32_t message_id = NR_DL_DCCH_MessageType__c1_PR_rrcReconfiguration;
   byte_array_t buffer_ba = {.len = rrc_reconf_len};
@@ -351,6 +392,13 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_contain
   ho_cancel_t cancel = nr_rrc_cancel_f1_ho;
   byte_array_t hpi = {.buf = buf, .len = size};
   nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel);
+}
+
+void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du)
+{
+  nr_rrc_trigger_f1_ho(rrc, ue, source_du, target_du);
+  if (ue->ho_context)
+    ue->ho_context->ltm_handover = true;
 }
 
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue)

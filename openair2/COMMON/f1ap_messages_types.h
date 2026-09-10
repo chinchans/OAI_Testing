@@ -521,17 +521,81 @@
    f1ap_LTMConfigurationIDMapping_Item_t *list_array;
  } f1ap_LTMConfigurationIDMappingList_t;
  
- /* EarlySyncInformation-Request: RequestforRACHConfiguration, LTMgNB-DU-IDsList */
- #define F1AP_MAX_NO_LTM_GNB_DU_IDS 16
- typedef struct f1ap_LTMgNB_DU_IDs_Item_s {
-   uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
- } f1ap_LTMgNB_DU_IDs_Item_t;
- 
- typedef struct f1ap_EarlySyncInformation_Request_s {
-   byte_array_t *RequestforRACHConfiguration; /* OCTET STRING */
-   int LTMgNB_DU_IDsList_count;
-   f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
- } f1ap_EarlySyncInformation_Request_t;
+/* EarlySyncInformation-Request: RequestforRACHConfiguration, LTMgNB-DU-IDsList */
+#define F1AP_MAX_NO_LTM_GNB_DU_IDS 16
+typedef struct f1ap_LTMgNB_DU_IDs_Item_s {
+  uint64_t lTMgNB_DU_ID; /* GNB-DU-ID ::= INTEGER (0..68719476735) */
+} f1ap_LTMgNB_DU_IDs_Item_t;
+
+typedef struct f1ap_EarlySyncInformation_Request_s {
+  int RequestforRACHConfiguration; /* ENUMERATED { true } */
+  int LTMgNB_DU_IDsList_count;
+  f1ap_LTMgNB_DU_IDs_Item_t *LTMgNB_DU_IDsList_array;
+} f1ap_EarlySyncInformation_Request_t;
+
+/* UE Context Modification Request LTM IEs (TS 38.473 9.2.2.7, Inter-gNB-DU LTM Handover) */
+typedef enum f1ap_reference_configuration_choice_e {
+  F1AP_REF_CONFIG_NOTHING = 0,
+  F1AP_REF_CONFIG_REQUEST_LOWER_LAYER,
+  F1AP_REF_CONFIG_REFERENCE_CONFIG_INFO,
+} f1ap_reference_configuration_choice_t;
+
+typedef struct f1ap_reference_configuration_s {
+  f1ap_reference_configuration_choice_t choice;
+  byte_array_t *referenceConfigurationInformation; /* OCTET STRING when choice is REFERENCE_CONFIG_INFO */
+} f1ap_reference_configuration_t;
+
+typedef struct f1ap_csi_resource_configuration_s {
+  byte_array_t *cSIResourceConfigToAddModList; /* OCTET STRING (RRC LTM-CSI-ResourceConfig) */
+  byte_array_t *cSIResourceConfigToReleaseList;
+} f1ap_csi_resource_configuration_t;
+
+typedef struct f1ap_LTMInformation_Modify_s {
+  int LTMIndicator; /* LTMIndicator ::= ENUMERATED { true } */
+  f1ap_reference_configuration_t *ReferenceConfiguration;
+  f1ap_csi_resource_configuration_t *CSIResourceConfiguration;
+} f1ap_LTMInformation_Modify_t;
+
+typedef struct f1ap_LTMCellsToBeReleased_Item_s {
+  plmn_id_t plmn;
+  uint64_t nr_cellid;
+} f1ap_LTMCellsToBeReleased_Item_t;
+
+typedef struct f1ap_LTMCellsToBeReleasedList_s {
+  int list_count;
+  f1ap_LTMCellsToBeReleased_Item_t *list_array;
+} f1ap_LTMCellsToBeReleasedList_t;
+
+typedef struct f1ap_LTMCFRAResourceConfig_Item_s {
+  plmn_id_t cellID_plmn;
+  uint64_t cellID_nr_cellid;
+  byte_array_t *lTMCFRAResourceConfiguration;
+  byte_array_t *lTMCFRAResourceConfigurationforSUL;
+} f1ap_LTMCFRAResourceConfig_Item_t;
+
+typedef struct f1ap_LTMCFRAResourceConfigList_s {
+  int list_count;
+  f1ap_LTMCFRAResourceConfig_Item_t *list_array;
+} f1ap_LTMCFRAResourceConfigList_t;
+
+typedef struct f1ap_LTMResetInformation_s {
+  byte_array_t *servingCellL2ResetConfiguration;
+} f1ap_LTMResetInformation_t;
+
+typedef struct f1ap_ssb_information_item_s {
+  long ssb_frequency;
+  long ssb_subcarrier_spacing;
+  long ssb_transmit_power;
+  long ssb_periodicity;
+  long ssb_half_frame_offset;
+  long ssb_sfn_offset;
+  uint16_t pci_nr;
+} f1ap_ssb_information_item_t;
+
+typedef struct f1ap_ssb_information_s {
+  int list_count;
+  f1ap_ssb_information_item_t *list_array;
+} f1ap_ssb_information_t;
  
  typedef struct f1ap_ue_context_setup_req_s {
    uint32_t gNB_CU_ue_id;
@@ -581,14 +645,14 @@
    byte_array_t *earlyULSyncConfigSUL;
  } f1ap_EarlySyncInformation_t;
  
- /* LTMConfiguration: sSBInformation, referenceConfigurationInformation optional, etc. */
- typedef struct f1ap_LTMConfiguration_s {
-   byte_array_t sSBInformation;                              /* SSBInformation ::= OCTET STRING */
-   byte_array_t *referenceConfigurationInformation;          /* optional */
-   int *completeCandidateConfigurationIndicator;             /* ENUMERATED { complete, ... } optional */
-   byte_array_t *lTMCFRAResourceConfig;                      /* optional */
-   byte_array_t *lTMCFRAResourceConfigSUL;                   /* optional */
- } f1ap_LTMConfiguration_t;
+/* LTMConfiguration: sSBInformation, referenceConfigurationInformation optional, etc. */
+typedef struct f1ap_LTMConfiguration_s {
+  f1ap_ssb_information_t sSBInformation;                      /* SSBInformation (mandatory) */
+  byte_array_t *referenceConfigurationInformation;          /* optional */
+  int *completeCandidateConfigurationIndicator;             /* ENUMERATED { complete, ... } optional */
+  byte_array_t *lTMCFRAResourceConfig;                      /* optional */
+  byte_array_t *lTMCFRAResourceConfigSUL;                   /* optional */
+} f1ap_LTMConfiguration_t;
  
  typedef struct f1ap_ue_context_setup_resp_s {
    uint32_t gNB_CU_ue_id;
@@ -632,24 +696,35 @@
    int drbs_len;
    f1ap_drb_to_setup_t *drbs; // as for SRBs
  
-   int drbs_rel_len;
-   f1ap_drb_to_release_t *drbs_rel;
- 
-   lower_layer_status_t *status;
- } f1ap_ue_context_mod_req_t;
- 
- typedef struct f1ap_ue_context_mod_resp {
-   uint32_t gNB_CU_ue_id;
-   uint32_t gNB_DU_ue_id;
- 
-   f1ap_du_to_cu_rrc_info_t *du_to_cu_rrc_info;
- 
-   int drbs_len;
-   f1ap_drb_setup_t *drbs;
- 
-   int srbs_len;
-   f1ap_srb_setup_t *srbs;
- } f1ap_ue_context_mod_resp_t;
+  int drbs_rel_len;
+  f1ap_drb_to_release_t *drbs_rel;
+
+  lower_layer_status_t *status;
+
+  /* Optional IEs for Inter-gNB-DU LTM Handover UE Context Modification (TS 38.473 9.2.2.7) */
+  f1ap_LTMInformation_Modify_t *LTMInformation_Modify;
+  f1ap_LTMConfigurationIDMappingList_t *LTMConfigurationIDMappingList;
+  f1ap_EarlySyncInformation_Request_t *EarlySyncInformation_Request;
+  f1ap_LTMCellsToBeReleasedList_t *LTMCellsToBeReleasedList;
+  f1ap_LTMCFRAResourceConfigList_t *LTMCFRAResourceConfigList;
+  f1ap_LTMResetInformation_t *LTMResetInformation;
+} f1ap_ue_context_mod_req_t;
+
+typedef struct f1ap_ue_context_mod_resp {
+  uint32_t gNB_CU_ue_id;
+  uint32_t gNB_DU_ue_id;
+
+  f1ap_du_to_cu_rrc_info_t *du_to_cu_rrc_info;
+
+  int drbs_len;
+  f1ap_drb_setup_t *drbs;
+
+  int srbs_len;
+  f1ap_srb_setup_t *srbs;
+
+  /* Optional IE for Inter-gNB-DU LTM Handover UE Context Modification Response (TS 38.473 9.2.2.8) */
+  f1ap_LTMConfiguration_t *LTMConfiguration;
+} f1ap_ue_context_mod_resp_t;
  
  typedef enum F1ap_Cause_e {
    F1AP_CAUSE_NOTHING,  /* No components present */
