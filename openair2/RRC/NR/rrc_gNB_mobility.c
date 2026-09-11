@@ -463,5 +463,8 @@ void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id)
     return;
   }
 
-  nr_rrc_trigger_f1_ho(rrc, ue, source_du, target_du);
+  /* CI telnet `trigger_f1_ho` must use LTM path so source Mod Request carries
+   * LTMInformation_Modify / EarlySync / LTMConfigurationIDMappingList IEs
+   * (Intent-2). Plain F1 HO omits those IEs from the wire and PCAP. */
+  nr_rrc_trigger_f1_ltm_ho(rrc, ue, source_du, target_du);
 }
