@@ -223,23 +223,21 @@ void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc, int nr_cgi, uint8_t *ho_prep_info, 
 }
 */
 
-typedef struct deliver_ho_dl_rrc_data_t {
+typedef struct deliver_ue_ctxt_modification_data_t {
   gNB_RRC_INST *rrc;
-  f1ap_dl_rrc_message_t *dl_rrc;
-  f1ap_ue_context_mod_req_t *stop_mod_req;
+  f1ap_ue_context_mod_req_t *modification_req;
   sctp_assoc_t assoc_id;
-} deliver_ho_dl_rrc_data_t;
-static void rrc_deliver_ho_dl_rrc_message(void *deliver_pdu_data, ue_id_t ue_id, int srb_id, char *buf, int size, int sdu_id)
+} deliver_ue_ctxt_modification_data_t;
+static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id, int srb_id, char *buf, int size, int sdu_id)
 {
   DevAssert(deliver_pdu_data != NULL);
-  deliver_ho_dl_rrc_data_t *data = deliver_pdu_data;
-  data->dl_rrc->rrc_container = (uint8_t *)buf;
-  data->dl_rrc->rrc_container_length = size;
-  DevAssert(data->dl_rrc->srb_id == srb_id);
-  /* Deliver HO RRC first, then Stop on source — never Stop before RRC is on the wire. */
-  data->rrc->mac_rrc.dl_rrc_message_transfer(data->assoc_id, data->dl_rrc);
-  if (data->stop_mod_req != NULL)
-    data->rrc->mac_rrc.ue_context_modification_request(data->assoc_id, data->stop_mod_req);
+  deliver_ue_ctxt_modification_data_t *data = deliver_pdu_data;
+  byte_array_t ba = {.buf = (uint8_t *)buf, .len = size};
+  data->modification_req->rrc_container = &ba;
+  /* Piggyback HO RRC + TransmissionActionIndicator=STOP in one UE Context
+   * Modification. Splitting via DL RRC Message Transfer then a Stop-only Mod
+   * (8b06476) left HO RRC unscheduled on air in CI (builds 629/630). */
+  data->rrc->mac_rrc.ue_context_modification_request(data->assoc_id, data->modification_req);
 }
 
 void nr_rrc_fill_ue_context_mod_req_ltm_handover(f1ap_ue_context_mod_req_t *req, gNB_RRC_UE_t *ue)
@@ -289,17 +287,9 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
   DevAssert(source->du != NULL);
   sctp_assoc_t assoc_id = source->du->assoc_id;
   uint32_t du_ue_id = source->du_ue_id;
-  RETURN_IF_INVALID_ASSOC_ID(assoc_id);
 
-  /* 1) Send HO RRC via DL RRC Message Transfer, then Stop in the same
-   * PDCP deliver callback so Stop cannot race ahead of the HO reconfig.
-   * Piggybacking RRC + STOP in one Mod can interrupt DL before TX. */
-  f1ap_dl_rrc_message_t dl_rrc = {
-      .gNB_CU_ue_id = ue->rrc_ue_id,
-      .gNB_DU_ue_id = du_ue_id,
-      .srb_id = 1,
-  };
   TransmActionInd_t transmission_action_indicator = TransmActionInd_STOP;
+  RETURN_IF_INVALID_ASSOC_ID(assoc_id);
   f1ap_ue_context_mod_req_t ue_context_modif_req = {
       .gNB_CU_ue_id = ue->rrc_ue_id,
       .gNB_DU_ue_id = du_ue_id,
@@ -307,19 +297,17 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
   };
   if (ue->ho_context->ltm_handover)
     nr_rrc_fill_ue_context_mod_req_ltm_handover(&ue_context_modif_req, ue);
-  deliver_ho_dl_rrc_data_t dl_data = {
-      .rrc = rrc,
-      .dl_rrc = &dl_rrc,
-      .stop_mod_req = &ue_context_modif_req,
-      .assoc_id = assoc_id,
-  };
+  deliver_ue_ctxt_modification_data_t data = {.rrc = rrc,
+                                              .modification_req = &ue_context_modif_req,
+                                              .assoc_id = assoc_id};
+  int srb_id = 1;
   nr_pdcp_data_req_srb(ue->rrc_ue_id,
-                       1,
+                       srb_id,
                        rrc_gNB_mui++,
                        rrc_reconf_len,
                        (unsigned char *const)rrc_reconf,
-                       rrc_deliver_ho_dl_rrc_message,
-                       &dl_data);
+                       rrc_deliver_ue_ctxt_modif_req,
+                       &data);
 #ifdef E2_AGENT
   uint32_t message_id = NR_DL_DCCH_MessageType__c1_PR_rrcReconfiguration;
   byte_array_t buffer_ba = {.len = rrc_reconf_len};
@@ -327,7 +315,7 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
   signal_rrc_msg(DL_DCCH_NR_RRC_CLASS, message_id, buffer_ba);
 #endif
 
-  /* 2) After HO RRC (+ Stop) is queued on the source DU, point F1 UE data at the target.
+  /* After HO RRC is queued on the source DU, point F1 UE data at the target.
    * ReconfigurationComplete for reconfigurationWithSync is sent on the target
    * cell; if secondary_ue still points at the source, CU drops that UL RRC
    * ("unexpected DU UE ID"). */

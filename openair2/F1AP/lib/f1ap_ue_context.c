@@ -2921,7 +2921,8 @@ F1AP_F1AP_PDU_t *encode_ue_context_mod_resp(const f1ap_ue_context_mod_resp_t *ms
     ie_ltm->value.choice.LTMConfiguration = encode_LTMConfiguration(msg->LTMConfiguration);
   }
 
-  xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
+  /* Do not xer_fprint every Mod Response here: it floods/stalls softmodem
+   * stdout during HO Stop and Intent-2 can match F1AP/RRC log markers instead. */
   return pdu;
 }
  
