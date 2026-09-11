@@ -28,6 +28,7 @@
 typedef struct gNB_RRC_INST_s gNB_RRC_INST;
 typedef struct gNB_RRC_UE_s gNB_RRC_UE_t;
 typedef struct nr_rrc_du_container_t nr_rrc_du_container_t;
+typedef struct f1ap_ue_context_mod_req_t f1ap_ue_context_mod_req_t;
 
 typedef struct NR_CellGroupConfig NR_CellGroupConfig_t;
 
@@ -75,7 +76,7 @@ typedef struct nr_handover_context_s {
 
 void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
 void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
-typedef void (*ho_cancel_t)(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
+void nr_rrc_fill_ue_context_mod_req_ltm_handover(f1ap_ue_context_mod_req_t *req, gNB_RRC_UE_t *ue);
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue);
 
 #endif /* RRC_GNB_MOBILITY_H_ */
