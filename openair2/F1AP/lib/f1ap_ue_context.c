@@ -3061,9 +3061,11 @@ void free_ue_context_mod_resp(f1ap_ue_context_mod_resp_t *resp)
   for (int i = 0; i < resp->srbs_len; ++i)
     free_srb_setup(&resp->srbs[i]);
   free(resp->srbs);
+  /* free_LTMConfiguration() already frees the outer pointer — do not free again
+   * (build 635: double free / Abort on source DU when LTM Mod Response is sent). */
   if (resp->LTMConfiguration) {
     free_LTMConfiguration(resp->LTMConfiguration);
-    free(resp->LTMConfiguration);
+    resp->LTMConfiguration = NULL;
   }
 }
  
