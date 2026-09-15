@@ -76,7 +76,8 @@ typedef struct nr_handover_context_s {
 
 void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
 void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
-typedef void (*ho_cancel_t)(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
+/* Intent-2 compile seed: conflicting typedef (identical redef is a no-op). RCA must restore fill decl. */
+typedef int (*ho_cancel_t)(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue);
 
 #endif /* RRC_GNB_MOBILITY_H_ */
