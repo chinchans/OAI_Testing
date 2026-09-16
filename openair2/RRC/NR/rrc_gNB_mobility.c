@@ -232,74 +232,24 @@ static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id,
 {
   DevAssert(deliver_pdu_data != NULL);
   deliver_ue_ctxt_modification_data_t *data = deliver_pdu_data;
-  byte_array_t ba = {.buf = (uint8_t *)buf, .len = size};
+  byte_array_t ba = {.buf = (uint8_t *) buf, .len = size};
   data->modification_req->rrc_container = &ba;
-  /* Piggyback HO RRC + TransmissionActionIndicator=STOP in one UE Context
-   * Modification. Splitting via DL RRC Message Transfer then a Stop-only Mod
-   * (8b06476) left HO RRC unscheduled on air in CI (builds 629/630). */
   data->rrc->mac_rrc.ue_context_modification_request(data->assoc_id, data->modification_req);
 }
-
-void nr_rrc_fill_ue_context_mod_req_ltm_handover(f1ap_ue_context_mod_req_t *req, gNB_RRC_UE_t *ue)
-{
-  DevAssert(req != NULL);
-  DevAssert(ue != NULL);
-  DevAssert(ue->ho_context != NULL);
-  DevAssert(ue->ho_context->target != NULL);
-  DevAssert(ue->ho_context->target->du != NULL);
-
-  const f1ap_served_cell_info_t *target_cell = &ue->ho_context->target->du->setup_req->cell[0].info;
-
-  req->plmn = malloc_or_fail(sizeof(*req->plmn));
-  *req->plmn = target_cell->plmn;
-  req->nr_cellid = malloc_or_fail(sizeof(*req->nr_cellid));
-  *req->nr_cellid = target_cell->nr_cellid;
-
-  f1ap_LTMInformation_Modify_t *ltm_mod = calloc_or_fail(1, sizeof(*ltm_mod));
-  ltm_mod->LTMIndicator = 0;
-  f1ap_reference_configuration_t *ref_cfg = calloc_or_fail(1, sizeof(*ref_cfg));
-  ref_cfg->choice = F1AP_REF_CONFIG_REQUEST_LOWER_LAYER;
-  ltm_mod->ReferenceConfiguration = ref_cfg;
-  req->LTMInformation_Modify = ltm_mod;
-
-  f1ap_LTMConfigurationIDMappingList_t *mapping = calloc_or_fail(1, sizeof(*mapping));
-  mapping->list_count = 1;
-  mapping->list_array = calloc_or_fail(1, sizeof(*mapping->list_array));
-  mapping->list_array[0].lTMCellID_plmn = target_cell->plmn;
-  mapping->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
-  mapping->list_array[0].lTMConfigurationID = 1;
-  req->LTMConfigurationIDMappingList = mapping;
-
-  f1ap_EarlySyncInformation_Request_t *early_sync = calloc_or_fail(1, sizeof(*early_sync));
-  early_sync->RequestforRACHConfiguration = 0;
-  early_sync->LTMgNB_DU_IDsList_count = 1;
-  early_sync->LTMgNB_DU_IDsList_array = calloc_or_fail(1, sizeof(*early_sync->LTMgNB_DU_IDsList_array));
-  early_sync->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = ue->ho_context->target->du->setup_req->gNB_DU_id;
-  req->EarlySyncInformation_Request = early_sync;
-}
-
 static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, uint8_t *rrc_reconf, int rrc_reconf_len)
 {
-  /* Always deliver HO RRCReconfiguration on the source DU. Live F1 UE data may
-   * already point at the target after an early Mod Response (LTM prep). */
-  DevAssert(ue->ho_context != NULL && ue->ho_context->source != NULL);
-  nr_ho_source_cu_t *source = ue->ho_context->source;
-  DevAssert(source->du != NULL);
-  sctp_assoc_t assoc_id = source->du->assoc_id;
-  uint32_t du_ue_id = source->du_ue_id;
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
 
   TransmActionInd_t transmission_action_indicator = TransmActionInd_STOP;
-  RETURN_IF_INVALID_ASSOC_ID(assoc_id);
+  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
   f1ap_ue_context_mod_req_t ue_context_modif_req = {
       .gNB_CU_ue_id = ue->rrc_ue_id,
-      .gNB_DU_ue_id = du_ue_id,
+      .gNB_DU_ue_id = ue_data.secondary_ue,
       .transm_action_ind = &transmission_action_indicator,
   };
-  if (ue->ho_context->ltm_handover)
-    nr_rrc_fill_ue_context_mod_req_ltm_handover(&ue_context_modif_req, ue);
   deliver_ue_ctxt_modification_data_t data = {.rrc = rrc,
                                               .modification_req = &ue_context_modif_req,
-                                              .assoc_id = assoc_id};
+                                              .assoc_id = ue_data.du_assoc_id};
   int srb_id = 1;
   nr_pdcp_data_req_srb(ue->rrc_ue_id,
                        srb_id,
@@ -314,30 +264,6 @@ static void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_
   buffer_ba.buf = rrc_reconf;
   signal_rrc_msg(DL_DCCH_NR_RRC_CLASS, message_id, buffer_ba);
 #endif
-
-  /* After HO RRC is queued on the source DU, point F1 UE data at the target.
-   * ReconfigurationComplete for reconfigurationWithSync is sent on the target
-   * cell; if secondary_ue still points at the source, CU drops that UL RRC
-   * ("unexpected DU UE ID"). */
-  nr_ho_target_cu_t *target = ue->ho_context->target;
-  DevAssert(target != NULL && target->du != NULL);
-  if (target->new_rnti != 0) {
-    f1_ue_data_t ue_data = cu_get_f1_ue_data(ue->rrc_ue_id);
-    ue_data.secondary_ue = target->du_ue_id;
-    ue_data.du_assoc_id = target->du->assoc_id;
-    bool success = cu_update_f1_ue_data(ue->rrc_ue_id, &ue_data);
-    DevAssert(success);
-    LOG_I(NR_RRC,
-          "UE %d handover: arm target F1 (DU UE ID %u RNTI %04x) after HO RRC on source\n",
-          ue->rrc_ue_id,
-          target->du_ue_id,
-          target->new_rnti);
-    DevAssert(source->old_rnti == ue->rnti);
-    ue->rnti = target->new_rnti;
-    ue->nr_cellid = target->du->setup_req->cell[0].info.nr_cellid;
-  } else {
-    LOG_E(NR_RRC, "UE %d: cannot arm target F1 after HO RRC (new_rnti still 0)\n", ue->rrc_ue_id);
-  }
 }
 
 static void nr_rrc_f1_ho_acknowledge(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
@@ -427,13 +353,6 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_contain
   nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel);
 }
 
-void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du)
-{
-  nr_rrc_trigger_f1_ho(rrc, ue, source_du, target_du);
-  if (ue->ho_context)
-    ue->ho_context->ltm_handover = true;
-}
-
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue)
 {
   if (ue->ho_context->source)
@@ -463,8 +382,5 @@ void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id)
     return;
   }
 
-  /* CI telnet `trigger_f1_ho` must use LTM path so source Mod Request carries
-   * LTMInformation_Modify / EarlySync / LTMConfigurationIDMappingList IEs
-   * (Intent-2). Plain F1 HO omits those IEs from the wire and PCAP. */
-  nr_rrc_trigger_f1_ltm_ho(rrc, ue, source_du, target_du);
+  nr_rrc_trigger_f1_ho(rrc, ue, source_du, target_du);
 }
