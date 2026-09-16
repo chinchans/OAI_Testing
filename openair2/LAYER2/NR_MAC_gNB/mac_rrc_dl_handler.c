@@ -809,9 +809,18 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
     ltm_cfg->sSBInformation.list_count = 1;
     ltm_cfg->sSBInformation.list_array = calloc_or_fail(1, sizeof(*ltm_cfg->sSBInformation.list_array));
     f1ap_ssb_information_item_t *ssb = &ltm_cfg->sSBInformation.list_array[0];
-    ssb->pci_nr = (uint16_t)scc->physCellId;
-    ssb->ssb_frequency = scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
-    ssb->ssb_subcarrier_spacing = scc->ssbSubcarrierSpacing;
+    /* RRC ServingCellConfigCommon fields are ASN.1 pointers; store values not addresses.
+     * Assigning the pointer itself produced ~1e14 "sSB-frequency" and failed
+     * F1AP_SSB-TF-Configuration INTEGER (0..3279165) constraint checks. */
+    AssertFatal(scc->physCellId != NULL
+                && scc->ssbSubcarrierSpacing != NULL
+                && scc->downlinkConfigCommon != NULL
+                && scc->downlinkConfigCommon->frequencyInfoDL != NULL
+                && scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB != NULL,
+                "Missing SCC fields for LTM SSB-TF-Configuration\n");
+    ssb->pci_nr = (uint16_t)(*scc->physCellId);
+    ssb->ssb_frequency = *scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencySSB;
+    ssb->ssb_subcarrier_spacing = *scc->ssbSubcarrierSpacing;
     ssb->ssb_transmit_power = 0;
     ssb->ssb_periodicity = 2;
     ssb->ssb_half_frame_offset = 0;

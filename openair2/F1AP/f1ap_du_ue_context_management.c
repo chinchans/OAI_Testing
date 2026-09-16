@@ -144,7 +144,7 @@ int DU_send_UE_CONTEXT_MODIFICATION_RESPONSE(sctp_assoc_t assoc_id, f1ap_ue_cont
   uint8_t *buffer = NULL;
   uint32_t len = 0;
   if (f1ap_encode_pdu(pdu, &buffer, &len) < 0) {
-    LOG_E(F1AP, "Failed to encode F1 UE CONTEXT SETUP RESPONSE\n");
+    LOG_E(F1AP, "Failed to encode F1 UE CONTEXT MODIFICATION RESPONSE\n");
     return -1;
   }
   f1ap_itti_send_sctp_data_req(assoc_id, buffer, len);
