@@ -40,9 +40,6 @@
 #include "uper_decoder.h"
 #include "uper_encoder.h"
 
-#include "F1AP_SSBInformation.h"
-#include "F1AP_SSBInformationItem.h"
-
 // Standarized 5QI values and Default Priority levels as mentioned in 3GPP TS 23.501 Table 5.7.4-1
 const uint64_t qos_fiveqi[26] = {1, 2, 3, 4, 65, 66, 67, 71, 72, 73, 74, 76, 5, 6, 7, 8, 9, 69, 70, 79, 80, 82, 83, 84, 85, 86};
 const uint64_t qos_priority[26] = {20, 40, 30, 50, 7, 20, 15, 56, 56, 56, 56, 56, 10,
@@ -607,40 +604,6 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   return UE;
 }
 
-static void fill_ltm_ue_context_setup_response(const f1ap_ue_context_setup_req_t *req, f1ap_ue_context_setup_resp_t *resp)
-{
-  if (!req->LTMInformation_Setup && !req->LTMConfigurationIDMappingList && !req->EarlySyncInformation_Request)
-    return;
-
-  resp->LTMConfiguration = calloc_or_fail(1, sizeof(*resp->LTMConfiguration));
-  resp->LTMConfiguration->completeCandidateConfigurationIndicator = calloc_or_fail(1, sizeof(int));
-  *resp->LTMConfiguration->completeCandidateConfigurationIndicator = 0;
-
-  F1AP_SSBInformation_t ssb = {0};
-  asn1cSequenceAdd(ssb.sSBInformationList.list, F1AP_SSBInformationItem_t, ssb_item);
-  ssb_item->pCI_NR = 0;
-  ssb_item->sSB_Configuration.sSB_frequency = 0;
-  ssb_item->sSB_Configuration.sSB_subcarrier_spacing = F1AP_SSB_TF_Configuration__sSB_subcarrier_spacing_kHz30;
-  ssb_item->sSB_Configuration.sSB_Transmit_power = 0;
-  ssb_item->sSB_Configuration.sSB_periodicity = F1AP_SSB_TF_Configuration__sSB_periodicity_ms20;
-  ssb_item->sSB_Configuration.sSB_half_frame_offset = 0;
-  ssb_item->sSB_Configuration.sSB_SFN_offset = 0;
-
-  uint8_t ssb_buf[512] = {0};
-  asn_enc_rval_t ssb_enc = aper_encode_to_buffer(&asn_DEF_F1AP_SSBInformation, NULL, &ssb, ssb_buf, sizeof(ssb_buf));
-  AssertFatal(ssb_enc.encoded > 0, "aper_encode F1AP_SSBInformation failed\n");
-  resp->LTMConfiguration->sSBInformation = create_byte_array((ssb_enc.encoded + 7) >> 3, ssb_buf);
-
-  if (req->EarlySyncInformation_Request) {
-    resp->EarlySyncInformation = calloc_or_fail(1, sizeof(*resp->EarlySyncInformation));
-    resp->EarlySyncInformation->tCIStatesConfigurationsList_count = 1;
-    resp->EarlySyncInformation->tCIStatesConfigurationsList_array =
-        calloc_or_fail(1, sizeof(*resp->EarlySyncInformation->tCIStatesConfigurationsList_array));
-    resp->EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIStateID = 0;
-    resp->EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIState = create_byte_array(0, NULL);
-  }
-}
-
 void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
 {
   const bool is_SA = IS_SA_MODE(get_softmodem_params());
@@ -734,8 +697,6 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   configure_UE_BWP(mac, scc, UE, false, ss_type, -1, -1);
 
   NR_SCHED_UNLOCK(&mac->sched_lock);
-
-  fill_ltm_ue_context_setup_response(req, &resp);
 
   mac->mac_rrc.ue_context_setup_response(&resp);
 
