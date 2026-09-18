@@ -2256,14 +2256,7 @@
      ie12->value.choice.SRBs_SetupMod_List = encode_srbs_setupmod(msg->srbs_len, msg->srbs);
    }
 
-
-   if (msg->LTMConfiguration) {
-     asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextModificationResponseIEs_t, ie_ltm);
-     ie_ltm->id = F1AP_ProtocolIE_ID_id_LTMConfiguration;
-     ie_ltm->criticality = F1AP_Criticality_ignore;
-     ie_ltm->value.present = F1AP_UEContextModificationResponseIEs__value_PR_LTMConfiguration;
-     ie_ltm->value.choice.LTMConfiguration = encode_LTMConfiguration(msg->LTMConfiguration);
-   }
+   /* LTMConfiguration belongs on setup_resp, not mod_resp (struct has no such member). */
    xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
 
 
