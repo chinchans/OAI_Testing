@@ -1614,7 +1614,8 @@
      ie_es->value.choice.EarlySyncInformation_Request =
          encode_f1ap_early_sync_information_request(req->EarlySyncInformation_Request);
    }
- 
+
+   xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
    return pdu;
  }
 
@@ -2025,7 +2026,8 @@
      ie_ltm->value.present = F1AP_UEContextSetupResponseIEs__value_PR_LTMConfiguration;
      ie_ltm->value.choice.LTMConfiguration = encode_f1ap_ltm_configuration(msg->LTMConfiguration);
    }
- 
+
+   xer_fprint(stdout, &asn_DEF_F1AP_F1AP_PDU, pdu);
    return pdu;
  }
 

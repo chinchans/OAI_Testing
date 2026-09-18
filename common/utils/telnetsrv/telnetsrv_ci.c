@@ -165,14 +165,8 @@ int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
 }
 
 extern void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id);
-/**
- * @brief Trigger F1 handover for UE
- * @param buf: RRC UE ID or NULL for the first UE in list
- * @param debug: Debug flag
- * @param prnt: Print function
- * @return 0 on success, -1 on failure
- */
-int rrc_gNB_trigger_f1_ho(char *buf, int debug, telnet_printfunc_t prnt)
+
+static int rrc_gNB_trigger_f1_ho_common(char *buf, telnet_printfunc_t prnt, const char *label)
 {
   if (!RC.nrrrc)
     ERROR_MSG_RET("no RRC present, cannot list counts\n");
@@ -190,8 +184,26 @@ int rrc_gNB_trigger_f1_ho(char *buf, int debug, telnet_printfunc_t prnt)
 
   gNB_RRC_UE_t *UE = &ue->ue_context;
   nr_HO_F1_trigger_telnet(RC.nrrrc[0], UE->rrc_ue_id);
-  prnt("RRC F1 handover triggered for UE %u\n", UE->rrc_ue_id);
+  prnt("RRC %s handover triggered for UE %u\n", label, UE->rrc_ue_id);
   return 0;
+}
+
+/**
+ * @brief Trigger F1 LTM handover for UE (Setup LTM IEs on candidate DU)
+ */
+int rrc_gNB_trigger_f1_ho(char *buf, int debug, telnet_printfunc_t prnt)
+{
+  (void)debug;
+  return rrc_gNB_trigger_f1_ho_common(buf, prnt, "F1");
+}
+
+/**
+ * @brief Explicit LTM F1 handover trigger (same path as trigger_f1_ho)
+ */
+int rrc_gNB_trigger_f1_ltm_ho(char *buf, int debug, telnet_printfunc_t prnt)
+{
+  (void)debug;
+  return rrc_gNB_trigger_f1_ho_common(buf, prnt, "F1 LTM");
 }
 
 int force_ul_failure(char *buf, int debug, telnet_printfunc_t prnt)
@@ -222,6 +234,7 @@ static telnetshell_cmddef_t cicmds[] = {
     {"force_ue_release", "[rnti(hex,opt)]", force_ue_release},
     {"force_ul_failure", "[rnti(hex,opt)]", force_ul_failure},
     {"trigger_f1_ho", "[rrc_ue_id(int,opt)]", rrc_gNB_trigger_f1_ho},
+    {"trigger_f1_ltm_ho", "[rrc_ue_id(int,opt)]", rrc_gNB_trigger_f1_ltm_ho},
     {"fetch_du_by_ue_id", "[rrc_ue_id(int,opt)]", fetch_du_by_ue_id},
     {"", "", NULL},
 };
