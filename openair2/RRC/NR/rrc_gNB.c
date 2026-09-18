@@ -2132,6 +2132,12 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     // handling of "target CU" information
     DevAssert(UE->ho_context->target != NULL);
     DevAssert(resp->crnti != NULL);
+    if (UE->ho_context->ltm_handover) {
+      DevAssert(resp->LTMConfiguration != NULL);
+      DevAssert(resp->LTMConfiguration->sSBInformation.len > 0);
+      if (resp->EarlySyncInformation)
+        DevAssert(resp->EarlySyncInformation->tCIStatesConfigurationsList_count > 0);
+    }
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;
     UE->ho_context->target->ho_req_ack(rrc, UE);

@@ -70,9 +70,11 @@ typedef struct nr_ho_target_cu {
 typedef struct nr_handover_context_s {
   nr_ho_source_cu_t *source;
   nr_ho_target_cu_t *target;
+  bool ltm_handover;
 } nr_handover_context_t;
 
 void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
+void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du);
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue);
 
 #endif /* RRC_GNB_MOBILITY_H_ */

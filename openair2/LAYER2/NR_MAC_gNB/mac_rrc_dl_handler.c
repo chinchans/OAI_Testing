@@ -696,6 +696,35 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   int ss_type = cg_configinfo ? NR_SearchSpace__searchSpaceType_PR_ue_Specific: NR_SearchSpace__searchSpaceType_PR_common;
   configure_UE_BWP(mac, scc, UE, false, ss_type, -1, -1);
 
+  if (req->LTMInformation_Setup || req->EarlySyncInformation_Request) {
+    resp.LTMConfiguration = calloc_or_fail(1, sizeof(*resp.LTMConfiguration));
+    NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
+    AssertFatal(scc->physCellId != NULL, "physCellId required for LTM UE Context Setup Response\n");
+    resp.LTMConfiguration->sSBInformation = f1ap_build_ssb_information_ba((uint16_t)*scc->physCellId);
+    if (req->LTMInformation_Setup && req->LTMInformation_Setup->ReferenceConfiguration) {
+      resp.LTMConfiguration->referenceConfigurationInformation =
+          malloc_or_fail(sizeof(*resp.LTMConfiguration->referenceConfigurationInformation));
+      *resp.LTMConfiguration->referenceConfigurationInformation =
+          copy_byte_array(*req->LTMInformation_Setup->ReferenceConfiguration);
+    }
+    resp.LTMConfiguration->completeCandidateConfigurationIndicator =
+        malloc_or_fail(sizeof(*resp.LTMConfiguration->completeCandidateConfigurationIndicator));
+    *resp.LTMConfiguration->completeCandidateConfigurationIndicator = 0;
+    if (req->LTMInformation_Setup && req->LTMInformation_Setup->cSIResourceConfigToAddModList) {
+      resp.LTMConfiguration->lTMCFRAResourceConfig = malloc_or_fail(sizeof(*resp.LTMConfiguration->lTMCFRAResourceConfig));
+      *resp.LTMConfiguration->lTMCFRAResourceConfig =
+          copy_byte_array(*req->LTMInformation_Setup->cSIResourceConfigToAddModList);
+    }
+    if (req->EarlySyncInformation_Request) {
+      resp.EarlySyncInformation = calloc_or_fail(1, sizeof(*resp.EarlySyncInformation));
+      resp.EarlySyncInformation->tCIStatesConfigurationsList_count = 1;
+      resp.EarlySyncInformation->tCIStatesConfigurationsList_array =
+          calloc_or_fail(1, sizeof(*resp.EarlySyncInformation->tCIStatesConfigurationsList_array));
+      resp.EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIStateID = 0;
+      resp.EarlySyncInformation->tCIStatesConfigurationsList_array[0].tCIState = create_byte_array(0, NULL);
+    }
+  }
+
   NR_SCHED_UNLOCK(&mac->sched_lock);
 
   mac->mac_rrc.ue_context_setup_response(&resp);
