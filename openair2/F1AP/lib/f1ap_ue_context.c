@@ -1628,7 +1628,7 @@
  /**
   * @brief Encode F1 UE context setup response to ASN.1
   */
- F1AP_F1AP_PDU_t *encode_ue_context_mod_resp(const f1ap_ue_context_mod_resp_t *msg)
+ F1AP_F1AP_PDU_t *encode_ue_context_setup_resp(const f1ap_ue_context_setup_resp_t *msg)
  {
    F1AP_F1AP_PDU_t *pdu = calloc_or_fail(1, sizeof(*pdu));
  
@@ -2204,7 +2204,7 @@
  /**
   * @brief Encode F1 UE context modification response to ASN.1
   */
- F1AP_F1AP_PDU_t *encode_ue_context_mod_resp(const f1ap_ue_context_mod_resp_t *msg)
+ F1AP_F1AP_PDU_t *encode_ue_context_setup_resp(const f1ap_ue_context_setup_resp_t *msg)
  {
    F1AP_F1AP_PDU_t *pdu = calloc_or_fail(1, sizeof(*pdu));
  
