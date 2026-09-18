@@ -1380,12 +1380,11 @@
    F1AP_SSBInformation_t *decoded = NULL;
    asn_dec_rval_t rval = aper_decode(NULL, &asn_DEF_F1AP_SSBInformation, (void **)&decoded, ba->buf, ba->len, 0, 0);
    AssertFatal(rval.code == RC_OK && decoded != NULL, "aper_decode F1AP_SSBInformation failed\n");
-   F1AP_SSBInformation_t *copy = NULL;
-   const int rc = asn_copy(&asn_DEF_F1AP_SSBInformation, (void **)&copy, decoded);
-   AssertFatal(rc == 0 && copy != NULL, "asn_copy F1AP_SSBInformation failed\n");
-   ASN_STRUCT_FREE(asn_DEF_F1AP_SSBInformation, decoded);
-   *dest = *copy;
-   ASN_STRUCT_FREE(asn_DEF_F1AP_SSBInformation, copy);
+   /* Transfer ownership of nested pointers to dest. ASN_STRUCT_FREE(decoded)
+    * here would free memory still referenced by dest (use-after-free) and
+    * crash DU during Setup Response xer/aper encode — HO never completes. */
+   *dest = *decoded;
+   free(decoded);
  }
  
  static F1AP_LTMConfiguration_t encode_f1ap_ltm_configuration(const f1ap_LTMConfiguration_t *in)
