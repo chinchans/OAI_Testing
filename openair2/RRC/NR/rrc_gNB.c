@@ -2132,18 +2132,6 @@ static void rrc_CU_process_ue_context_setup_response(MessageDef *msg_p, instance
     // handling of "target CU" information
     DevAssert(UE->ho_context->target != NULL);
     DevAssert(resp->crnti != NULL);
-    if (UE->ho_context->ltm_handover) {
-      if (resp->LTMConfiguration == NULL || resp->LTMConfiguration->sSBInformation.len == 0) {
-        LOG_E(RRC, "UE %u: Inter-DU LTM HO missing LTMConfiguration in UE CONTEXT SETUP RESPONSE\n", UE->rrc_ue_id);
-        return;
-      }
-      if (resp->EarlySyncInformation && resp->EarlySyncInformation->tCIStatesConfigurationsList_count > 0) {
-        LOG_I(RRC,
-              "UE %u: LTM HO UE CONTEXT SETUP RESPONSE carries TCI state config (count %d)\n",
-              UE->rrc_ue_id,
-              resp->EarlySyncInformation->tCIStatesConfigurationsList_count);
-      }
-    }
     UE->ho_context->target->du_ue_id = resp->gNB_DU_ue_id;
     UE->ho_context->target->new_rnti = *resp->crnti;
     UE->ho_context->target->ho_req_ack(rrc, UE);
