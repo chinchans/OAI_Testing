@@ -114,33 +114,6 @@ static int fill_drb_to_be_setup(const gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, f1ap_
  * \param target_du the DU towards which to handover. Note: currently, the CU
  * is limited to one cell per DU, so DU and cell are equivalent here.
  * \param ho_ctxt contextual data for the type of handover (F1, N2, Xn) */
-static void fill_inter_du_ltm_ue_context_setup_req(f1ap_ue_context_setup_req_t *req,
-                                                   const nr_rrc_du_container_t *target_du,
-                                                   const nr_rrc_du_container_t *source_du)
-{
-  f1ap_served_cell_info_t *target_cell = &target_du->setup_req->cell[0].info;
-
-  req->LTMInformation_Setup = calloc_or_fail(1, sizeof(*req->LTMInformation_Setup));
-  req->LTMInformation_Setup->LTMIndicator = 0; /* LTMIndicator ::= true */
-
-  req->LTMConfigurationIDMappingList = calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList));
-  req->LTMConfigurationIDMappingList->list_count = 1;
-  req->LTMConfigurationIDMappingList->list_array = calloc_or_fail(1, sizeof(*req->LTMConfigurationIDMappingList->list_array));
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_plmn = target_cell->plmn;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMCellID_nr_cellid = target_cell->nr_cellid;
-  req->LTMConfigurationIDMappingList->list_array[0].lTMConfigurationID = 1;
-
-  req->EarlySyncInformation_Request = calloc_or_fail(1, sizeof(*req->EarlySyncInformation_Request));
-  req->EarlySyncInformation_Request->RequestforRACHConfiguration = malloc_or_fail(sizeof(*req->EarlySyncInformation_Request->RequestforRACHConfiguration));
-  *req->EarlySyncInformation_Request->RequestforRACHConfiguration = create_byte_array(0, NULL);
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_count = 1;
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array =
-      calloc_or_fail(1, sizeof(*req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array));
-  req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = target_du->setup_req->gNB_DU_id;
-  if (source_du != NULL)
-    req->EarlySyncInformation_Request->LTMgNB_DU_IDsList_array[0].lTMgNB_DU_ID = source_du->setup_req->gNB_DU_id;
-}
-
 static void nr_initiate_handover(const gNB_RRC_INST *rrc,
                                  gNB_RRC_UE_t *ue,
                                  const nr_rrc_du_container_t *source_du,
@@ -148,8 +121,7 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
                                  byte_array_t *ho_prep_info,
                                  ho_req_ack_t ack,
                                  ho_success_t success,
-                                 ho_cancel_t cancel,
-                                 bool ltm_handover)
+                                 ho_cancel_t cancel)
 {
   DevAssert(rrc != NULL);
   DevAssert(ue != NULL);
@@ -173,7 +145,6 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
   // otherwise only for the target DU (N2, Xn)
   ho_ctx_type_t ctx_type = source_du != NULL ? HO_CTX_BOTH : HO_CTX_TARGET;
   nr_handover_context_t *ho_ctx = alloc_ho_ctx(ctx_type);
-  ho_ctx->ltm_handover = ltm_handover;
   ho_ctx->target->du = target_du;
   // we will know target->{du_ue_id,new_rnti} once we have UE ctxt setup
   // response
@@ -232,8 +203,6 @@ static void nr_initiate_handover(const gNB_RRC_INST *rrc,
       .cu_to_du_rrc_info.ho_prep_info = hpi,
       .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
   };
-  if (ltm_handover)
-    fill_inter_du_ltm_ue_context_setup_req(&ue_context_setup_req, target_du, source_du);
   rrc->mac_rrc.ue_context_setup_request(target_du->assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
 }
@@ -381,22 +350,7 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_contain
   ho_success_t success = nr_rrc_f1_ho_complete;
   ho_cancel_t cancel = nr_rrc_cancel_f1_ho;
   byte_array_t hpi = {.buf = buf, .len = size};
-  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel, false);
-}
-
-void nr_rrc_trigger_f1_ltm_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, nr_rrc_du_container_t *source_du, nr_rrc_du_container_t *target_du)
-{
-  DevAssert(rrc != NULL);
-  DevAssert(ue != NULL);
-
-  uint8_t buf[NR_RRC_BUF_SIZE];
-  int size = do_NR_HandoverPreparationInformation(ue->ue_cap_buffer.buf, ue->ue_cap_buffer.len, buf, sizeof buf);
-
-  ho_req_ack_t ack = nr_rrc_f1_ho_acknowledge;
-  ho_success_t success = nr_rrc_f1_ho_complete;
-  ho_cancel_t cancel = nr_rrc_cancel_f1_ho;
-  byte_array_t hpi = {.buf = buf, .len = size};
-  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel, true);
+  nr_initiate_handover(rrc, ue, source_du, target_du, &hpi, ack, success, cancel);
 }
 
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue)
